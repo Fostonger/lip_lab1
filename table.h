@@ -29,13 +29,14 @@ typedef struct {
 typedef struct {
     page *first_page;
     page *first_page_to_write;
-    table_header header;
+    table_header* header;
 } table;
 
 OPTIONAL(table)
 
 extern inline uint8_t type_to_size(column_type type);
-maybe_table read_table(char *tablename, database db);
-table create_table(char *tablename);
-result add_column(table tb, char *column_name, column_type type);
-result save_table(database db, table tb);
+maybe_table read_table(const char *tablename, database *db);
+maybe_table create_table(const char *tablename);
+void release_table(table *tb);
+result add_column(table *tb, const char *column_name, column_type type);
+result save_table(database *db, table *tb);

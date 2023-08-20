@@ -20,15 +20,15 @@ typedef struct {
 } page_header;
 
 typedef struct {
-    page_header pgheader;
+    page_header *pgheader;
     page *next_page;
     void *data;
-    table_header tbheader;
+    table_header *tbheader;
 } page;
 
 typedef struct {
     FILE *file;
-    database_header header;
+    database_header *header;
     page *first_loaded_page;
 } database;
 
@@ -38,9 +38,9 @@ OPTIONAL(page)
 maybe_database initdb(FILE *file);
 maybe_database read_db(FILE *file);
 result write_db_header(database_header header, FILE *file);
-void close_db(database db);
+void close_db(database *db);
 
-maybe_page create_page(database db);
-maybe_page read_page(database db, uint16_t page_ordinal);
-result write_page(database db, page);
-void close_page(page pg);
+maybe_page create_page(database *db);
+maybe_page read_page(database *db, uint16_t page_ordinal);
+result write_page(database *db, page *pg);
+void close_page(page *pg);

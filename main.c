@@ -10,13 +10,13 @@ int main(void) {
     // FILE *dbfile = fopen(filename, "r+");
     // database db = unwrap_database(initdb(dbfile));
 
-    table t1 = create_table("table1");
+    table *t1 = unwrap_table( create_table("table1") );
     add_column(t1, "ints", INT_32);
     add_column(t1, "bools", BOOL);
     add_column(t1, "floats", FLOAT);
     add_column(t1, "strings", STRING);
 
-    data data1 = init_data(t1);
+    data *data1 = init_data(t1);
     data_init_integer(data1, 10);
     data_init_boolean(data1, 0);
     data_init_float(data1, 3.1415);
@@ -26,4 +26,6 @@ int main(void) {
     } else {
         printf("successfully set data!\n");
     }
+
+    release_table(t1);
 }
