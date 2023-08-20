@@ -37,5 +37,5 @@ OPTIONAL(table)
 extern inline uint8_t type_to_size(column_type type);
 maybe_table read_table(char *tablename, database db);
 table create_table(char *tablename);
-result add_column(char *column_name, column_type type);
+result add_column(table tb, char *column_name, column_type type);
 result save_table(database db, table tb);
