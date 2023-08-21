@@ -34,6 +34,8 @@ maybe_table create_table(const char *tablename) {
 }
 
 void release_table(table *tb) {
+    release_page(tb->first_page);
+    release_page(tb->first_string_page);
     free(tb->header);
     free(tb);
 }
