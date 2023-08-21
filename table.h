@@ -28,7 +28,9 @@ typedef struct {
 
 typedef struct {
     page *first_page;
+    page *first_string_page;
     page *first_page_to_write;
+    page *first_string_page_to_write;
     table_header* header;
 } table;
 
