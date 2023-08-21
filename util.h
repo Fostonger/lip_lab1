@@ -3,7 +3,8 @@
 typedef enum {
     OK = 0,
     MUST_BE_EMPTY,
-    MALLOC_ERROR
+    MALLOC_ERROR,
+    NOT_ENOUGH_SPACE
 } result;
 
 #define OPTIONAL(STRUCT_NAME)       \
@@ -19,8 +20,8 @@ typedef enum {
             ) {                                 \
         if (!optional.error)                    \
             return optional.value;              \
-        error(optional.error);                  \
+        is_success(optional.error);                  \
         return NULL;                            \
     }
 
-int8_t error( result result );
+int8_t is_success( result result );
