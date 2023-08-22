@@ -18,15 +18,15 @@ int main(void) {
 
     maybe_data data1 = init_data(t1);
     if (!data1.error) {
-        is_success(data1.error);
+        print_if_failure(data1.error);
         release_table(t1);
         return 1;
     }
     
-    if  (   !is_success( data_init_integer(data1.value, 10) ) 
-        ||  !is_success( data_init_boolean(data1.value, 0) )
-        ||  !is_success( data_init_float(data1.value, 3.1415) )
-        ||  !is_success( data_init_string(data1.value, "string test") ) ) {
+    if  (   !print_if_failure( data_init_integer(data1.value, 10) ) 
+        ||  !print_if_failure( data_init_boolean(data1.value, 0) )
+        ||  !print_if_failure( data_init_float(data1.value, 3.1415) )
+        ||  !print_if_failure( data_init_string(data1.value, "string test") ) ) {
 
             release_table(t1);
             release_data(data1.value);

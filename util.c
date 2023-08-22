@@ -9,7 +9,7 @@ static const char *const result_descriptions[] = {
     [NOT_ENOUGH_SPACE] = "ERROR: Row in table is not big enough to hold the value!"
 };
 
-int8_t is_success( result result ) {
+int8_t print_if_failure( result result ) {
     if (!result) return 1;
     printf("-->%s\n", result_descriptions[result]);
     return 0;

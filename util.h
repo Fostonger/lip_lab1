@@ -20,8 +20,8 @@ typedef enum {
             ) {                                 \
         if (!optional.error)                    \
             return optional.value;              \
-        is_success(optional.error);                  \
+        print_if_failure(optional.error);                  \
         return NULL;                            \
     }
 
-int8_t is_success( result result );
+int8_t print_if_failure( result result );
