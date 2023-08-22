@@ -61,3 +61,15 @@ result data_init_float(data *dt, float val) {
     *( (float*) ptr ) = val;
     dt->size += type_to_size(FLOAT);
 }
+
+result set_data(data *dt) {
+    result is_enough_space = ensure_enough_space_table(dt->table, dt->size);
+    if (!is_enough_space) return is_enough_space;
+
+    void **data_ptr = dt->bytes;
+    void *table_ptr = dt->table->first_string_page_to_write->data
+                            + dt->table->header->column_amount * dt->table->header->row_size;
+    memcpy(table_ptr, data_ptr, dt->size);
+
+    return OK;
+}

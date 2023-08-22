@@ -44,5 +44,6 @@ void close_db(database *db);
 maybe_page create_page(table_header *tb_header);
 maybe_page read_page(database *db, uint16_t page_ordinal);
 result ensure_enough_space_string(table *tb, size_t data_size);
+result ensure_enough_space_table(table *tb, size_t data_size);
 result write_page(database *db, page *pg);
 void release_page(page *pg);
