@@ -1,0 +1,32 @@
+{
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: clang сборка активного файла",
+            "command": "/usr/bin/gcc",
+            "args": [
+                "-g",
+                "-o",
+                "${workspaceFolder}/build/main",
+                "${workspaceFolder}/src/util.c",
+                "${workspaceFolder}/src/database_manager.c",
+                "${workspaceFolder}/src/table.c",
+                "${workspaceFolder}/src/data.c",
+                "${workspaceFolder}/src/data_iterator.c",
+                "${workspaceFolder}/src/main.c"
+            ],
+            "options": {
+                "cwd": "${fileDirname}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Задача создана отладчиком."
+        }
+    ],
+    "version": "2.0.0"
+}
