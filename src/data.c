@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 
 #include "data.h"
 #include "database_manager.h"
@@ -21,20 +22,21 @@ void release_data(data *dt) {
 
 result data_init_integer(data *dt, int32_t val) {
     if (dt->size + type_to_size(INT_32) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
-    char *ptr = dt->bytes + dt->size;
+    char *ptr = (char *)dt->bytes + dt->size;
     *( (int32_t*) ptr ) = val;
     dt->size += type_to_size(INT_32);
+    return OK;
 }
 
 result data_init_string(data *dt, const char* val) {
     if (dt->size + type_to_size(STRING) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
-    char *ptr = dt->bytes + dt->size;
+    char *ptr = (char *)dt->bytes + dt->size;
     dt->size += type_to_size(STRING);
 
     size_t string_len = strlen(val);
 
     result is_enough_space = ensure_enough_space_string(dt->table, string_len);
-    if (!is_enough_space) return is_enough_space;
+    if (is_enough_space) return is_enough_space;
 
     page *writable_page = dt->table->first_string_page_to_write;
 
@@ -46,30 +48,35 @@ result data_init_string(data *dt, const char* val) {
     strcpy(data, val);
 
     writable_page->pgheader->data_offset += string_len;
+    return OK;
 }
 
 result data_init_boolean(data *dt, bool val) {
     if (dt->size + type_to_size(BOOL) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
-    char *ptr = dt->bytes + dt->size;
+    char *ptr = (char *)dt->bytes + dt->size;
     *( (bool*) ptr ) = val;
     dt->size += type_to_size(BOOL);
+    return OK;
 }
 
 result data_init_float(data *dt, float val) {
     if (dt->size + type_to_size(FLOAT) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
-    char *ptr = dt->bytes + dt->size;
+    char *ptr = (char *)dt->bytes + dt->size;
     *( (float*) ptr ) = val;
     dt->size += type_to_size(FLOAT);
+    return OK;
 }
 
 result set_data(data *dt) {
     result is_enough_space = ensure_enough_space_table(dt->table, dt->size);
-    if (!is_enough_space) return is_enough_space;
+    if (is_enough_space) return is_enough_space;
 
     void **data_ptr = dt->bytes;
-    void *table_ptr = dt->table->first_string_page_to_write->data
-                            + dt->table->header->column_amount * dt->table->header->row_size;
+    void **table_ptr = dt->table->first_page_to_write->data
+                            + dt->table->first_page_to_write->pgheader->rows_count * dt->table->header->row_size;
     memcpy(table_ptr, data_ptr, dt->size);
+
+    dt->table->first_page_to_write->pgheader->rows_count += 1;
 
     return OK;
 }

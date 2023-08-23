@@ -2,39 +2,47 @@
 
 #include <inttypes.h>
 
+typedef enum column_type column_type;
+typedef struct column_header column_header;
+typedef struct table_header table_header;
+typedef struct table table;
+
 #include "util.h"
-#include "database_manager.h"
 
 #define MAX_NAME_LENGTH 31
 
-typedef enum {
+enum column_type {
     INT_32,
     FLOAT,
     STRING,
     BOOL
-} column_type;
+};
 
-typedef struct {
+struct column_header {
     column_type type;
     char name[MAX_NAME_LENGTH];
-} column_header;
+};
 
-typedef struct {
+struct table_header {
     uint8_t column_amount;
     uint16_t row_size;
     char name[MAX_NAME_LENGTH];
     column_header columns[];
-} table_header;
+};
 
-typedef struct {
+#include "database_manager.h"
+
+struct table {
     page *first_page;
     page *first_string_page;
     page *first_page_to_write;
     page *first_string_page_to_write;
     table_header* header;
-} table;
+};
 
 OPTIONAL(table)
+
+table *unwrap_table( maybe_table optional );
 
 extern inline uint8_t type_to_size(column_type type);
 maybe_table read_table(const char *tablename, database *db);

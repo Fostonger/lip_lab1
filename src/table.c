@@ -18,6 +18,13 @@ inline uint8_t type_to_size(column_type type) {
     }
 }
 
+table *unwrap_table( maybe_table optional ) {
+    if (!optional.error)
+        return optional.value;
+    print_if_failure(optional.error);
+    return NULL;
+}
+
 maybe_table create_table(const char *tablename) {
     table_header *header = malloc(sizeof(table_header));
     if (header == NULL) return (maybe_table) { .error=MALLOC_ERROR };
@@ -58,6 +65,8 @@ result add_column(table* tb, const char *column_name, column_type type) {
 
     free(tb->header);
     tb->header = new_header;
+
+    return OK;
 }
 
 size_t offset_to_column(table *tb, const char *column_name, column_type type) {

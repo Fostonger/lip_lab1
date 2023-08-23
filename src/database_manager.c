@@ -8,6 +8,7 @@ maybe_page create_page(table_header *tb_header) {
 
     header->data_offset = 0;
     header->table_header = *tb_header;
+    header->rows_count = 0;
     header->page_number = -1;
     header->next_page_number = -1;
 
@@ -23,8 +24,8 @@ maybe_page create_page(table_header *tb_header) {
 }
 
 result ensure_enough_space_string(table *tb, size_t data_size) {
-    maybe_page pg;
-    if (tb->first_string_page_to_write == NULL || !( pg = create_page(tb->header) ).error )
+    maybe_page pg = (maybe_page) {};
+    if (tb->first_string_page_to_write == NULL && ( pg = create_page(tb->header) ).error )
         return pg.error;
     if (pg.value != NULL) {
         tb->first_string_page_to_write = pg.value;
@@ -41,6 +42,32 @@ result ensure_enough_space_string(table *tb, size_t data_size) {
         if (new_pg.value != NULL) {
             tb->first_string_page_to_write->next_page = new_pg.value;
             tb->first_string_page_to_write = new_pg.value;
+            new_pg.value->pgheader->data_offset = 0;
+        }
+    }
+
+    return OK;
+}
+
+result ensure_enough_space_table(table *tb, size_t data_size) {
+    maybe_page pg = (maybe_page) {};
+    if (tb->first_page_to_write == NULL && ( pg = create_page(tb->header) ).error )
+        return pg.error;
+    if (pg.value != NULL) {
+        tb->first_page_to_write = pg.value;
+        tb->first_page = pg.value;
+        pg.value->pgheader->data_offset = 0;
+    }
+
+    page_header *writable_page_header = tb->first_page_to_write->pgheader;
+
+    if (writable_page_header->data_offset + data_size > PAGE_SIZE) {
+        maybe_page new_pg;
+        if ( !( new_pg = create_page(tb->header) ).error )
+            return new_pg.error;
+        if (new_pg.value != NULL) {
+            tb->first_page_to_write->next_page = new_pg.value;
+            tb->first_page_to_write = new_pg.value;
             new_pg.value->pgheader->data_offset = 0;
         }
     }

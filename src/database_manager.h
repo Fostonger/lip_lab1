@@ -3,35 +3,41 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+typedef struct database_header database_header;
+typedef struct page_header page_header;
+typedef struct page page;
+typedef struct database database;
+
 #include "table.h"
 #include "util.h"
 
 #define PAGE_SIZE 8192
 
-typedef struct {
+struct database_header {
     uint16_t page_size;
     uint16_t first_free_page;
-} database_header;
+};
 
-typedef struct {
+struct page_header {
     uint16_t data_offset;
     uint16_t page_number;
     uint16_t next_page_number;
+    uint16_t rows_count;
     table_header table_header;
-} page_header;
+};
 
-typedef struct {
+struct page {
     page_header *pgheader;
     page *next_page;
     void *data;
     table_header *tbheader;
-} page;
+};
 
-typedef struct {
+struct database {
     FILE *file;
     database_header *header;
     page *first_loaded_page;
-} database;
+};
 
 OPTIONAL(database)
 OPTIONAL(page)
