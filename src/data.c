@@ -33,7 +33,7 @@ result data_init_string(data *dt, const char* val) {
     char *ptr = (char *)dt->bytes + dt->size;
     dt->size += type_to_size(STRING);
 
-    size_t string_len = strlen(val);
+    size_t string_len = strlen(val) + 1;
 
     result is_enough_space = ensure_enough_space_string(dt->table, string_len);
     if (is_enough_space) return is_enough_space;

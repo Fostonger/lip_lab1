@@ -7,9 +7,10 @@ void get_integer(data_iterator *iter, int32_t *dest) {
 }
 
 void get_string(data_iterator *iter, char **dest) {
-    page *page_with_string = (page *)iter->cur_data;
-    size_t offset = (page *)iter->cur_data + 1;
-    *dest = *((const char *)page_with_string->data + offset);
+    page *page_with_string = *((page **)iter->cur_data);
+    size_t offset = *((page **)iter->cur_data + 1);
+    char *target_string = (char *)page_with_string->data + offset;
+    *dest = target_string;
 }
 
 void get_bool(data_iterator *iter, bool *dest) {
@@ -37,7 +38,7 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
     int32_t int_value;
     float float_value;
     int8_t bool_value;
-    char **string_value = NULL;
+    char *string_value = NULL;
     while (has_next(iter)) {
         if ((char *)iter->cur_data - (char *)iter->cur_page->data > PAGE_SIZE) {
             iter->cur_page = iter->cur_page->next_page;
@@ -58,7 +59,7 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
             if ( predicate_function(&bool_value) ) return true;
             break;
         case STRING:
-            get_string(iter, string_value);
+            get_string(iter, &string_value);
             if ( predicate_function(string_value) ) return true;
             break;
         default:

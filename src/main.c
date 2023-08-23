@@ -21,6 +21,11 @@ bool bool_iterator_func(bool *value) {
     return 0;
 }
 
+bool sting_iterator_func(char *value) {
+    printf("catched string value: %s\n", value);
+    return 0;
+}
+
 int main(void) {
     // char *filename = "database.fost.data";
     // FILE *dbfile = fopen(filename, "r+");
@@ -87,6 +92,10 @@ int main(void) {
     iterator = init_iterator(t1);
     if (iterator.error) return 1;
     seek_next_where(iterator.value, BOOL, "bools", bool_iterator_func);
+
+    iterator = init_iterator(t1);
+    if (iterator.error) return 1;
+    seek_next_where(iterator.value, STRING, "strings", sting_iterator_func);
 
     release_table(t1);
 }
