@@ -2,23 +2,24 @@
 
 #include "data_iterator.h"
 
-void get_integer(data_iterator *iter, int32_t *dest) {
-    *dest = *((int32_t *)iter->cur_data);
+void get_integer(data_iterator *iter, int32_t *dest, size_t offset) {
+    *dest = *((int32_t *)iter->cur_data + offset);
 }
 
-void get_string(data_iterator *iter, char **dest) {
-    page *page_with_string = *((page **)iter->cur_data);
-    size_t offset = *((page **)iter->cur_data + 1);
+void get_string(data_iterator *iter, char **dest, size_t data_offset) {
+    char *string_data_ptr = (char *)iter->cur_data + data_offset;
+    page *page_with_string = *((page **)string_data_ptr);
+    size_t offset = *((page **)page_with_string + 1);
     char *target_string = (char *)page_with_string->data + offset;
     *dest = target_string;
 }
 
-void get_bool(data_iterator *iter, bool *dest) {
-    *dest = *((const bool *) iter->cur_data);
+void get_bool(data_iterator *iter, bool *dest, size_t offset) {
+    *dest = *((const bool *) iter->cur_data + offset);
 }
 
-void get_float(data_iterator *iter, float *dest) {
-    *dest = *((const float *)iter->cur_data);
+void get_float(data_iterator *iter, float *dest, size_t offset) {
+    *dest = *((const float *)iter->cur_data + offset);
 }
 
 bool has_next(data_iterator *iter) {
@@ -33,7 +34,8 @@ bool has_next(data_iterator *iter) {
 bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, predicate_func predicate_function) {
     if (!has_next(iter)) return false;
 
-    iter->cur_data = (char *)iter->cur_page->data + offset_to_column(iter->tb, column_name, type);
+    iter->cur_data = (char *)iter->cur_page->data;
+    size_t offset = offset_to_column(iter->tb, column_name, type);
     
     int32_t int_value;
     float float_value;
@@ -47,19 +49,19 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
 
         switch (type) {
         case INT_32:
-            get_integer(iter, &int_value);
+            get_integer(iter, &int_value, offset);
             if ( predicate_function(&int_value) ) return true;
             break;
         case FLOAT:
-            get_float(iter, &float_value);
+            get_float(iter, &float_value, offset);
             if ( predicate_function(&float_value) ) return true;
             break;
         case BOOL:
-            get_bool(iter, &bool_value);
+            get_bool(iter, &bool_value, offset);
             if ( predicate_function(&bool_value) ) return true;
             break;
         case STRING:
-            get_string(iter, &string_value);
+            get_string(iter, &string_value, offset);
             if ( predicate_function(string_value) ) return true;
             break;
         default:
