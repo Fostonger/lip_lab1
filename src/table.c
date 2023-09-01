@@ -69,10 +69,10 @@ result add_column(table* tb, const char *column_name, column_type type) {
     return OK;
 }
 
-size_t offset_to_column(table *tb, const char *column_name, column_type type) {
+size_t offset_to_column(table_header *tb_header, const char *column_name, column_type type) {
     size_t offset = 0;
-    for (size_t column_index = 0; column_index < tb->header->column_amount; column_index++ ) {
-        column_header column = tb->header->columns[column_index];
+    for (size_t column_index = 0; column_index < tb_header->column_amount; column_index++ ) {
+        column_header column = tb_header->columns[column_index];
         if (column.type == type && !strcmp(column.name, column_name)) return offset;
         offset += type_to_size(column.type);
     }

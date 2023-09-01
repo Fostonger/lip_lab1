@@ -8,9 +8,10 @@ void get_integer(data_iterator *iter, int32_t *dest, size_t offset) {
 
 void get_string(data_iterator *iter, char **dest, size_t data_offset) {
     char *string_data_ptr = (char *)iter->cur_data + data_offset;
-    page *page_with_string = *((page **)string_data_ptr);
-    size_t offset = *((page **)page_with_string + 1);
-    char *target_string = (char *)page_with_string->data + offset;
+    string_in_table_data *string_in_table = string_data_ptr;
+    maybe_page page_with_string = get_page_by_number(iter->tb->first_string_page, string_in_table->string_page_number);
+    if (page_with_string.error) return;
+    char *target_string = (char *)page_with_string.value->data + string_in_table->offset;
     *dest = target_string;
 }
 
@@ -26,16 +27,14 @@ bool has_next(data_iterator *iter) {
     page *cur_page = iter->cur_page;
     void **cur_data = iter->cur_data;
 
-    return ( (char *)cur_data - (char *)cur_page->data < PAGE_SIZE 
-            && ( (char *)cur_data - (char *)cur_page->data ) / iter->tb->header->row_size < cur_page->pgheader->rows_count ) 
-        || cur_page->next_page != NULL;
+    return has_next_data_on_page(cur_page, cur_data) || cur_page->next_page != NULL;
 }
 
 bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, predicate_func predicate_function) {
     if (!has_next(iter)) return false;
 
     iter->cur_data = (char *)iter->cur_page->data;
-    size_t offset = offset_to_column(iter->tb, column_name, type);
+    size_t offset = offset_to_column(iter->tb->header, column_name, type);
     
     int32_t int_value;
     float float_value;
@@ -73,6 +72,31 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
     return false;
 }
 
+result_with_count delete_where(table *tb, column_type type, const char *column_name, predicate_func predicate_function) {
+    maybe_data_iterator iterator = init_iterator(tb);
+    if (!iterator.error) return (result_with_count) { .error=iterator.error, .count=0 };
+    int16_t delete_count = 0;
+    while (seek_next_where(iterator.value, type, column_name, predicate_function)) {
+        maybe_data data_to_delete = get_data(iterator.value);
+        if (!data_to_delete.error) return (result_with_count) { .error=data_to_delete.error, .count=delete_count };
+        delete_saved_row(data_to_delete.value);
+        delete_count++;
+    }
+
+    release_iterator(iterator.value);
+    return (result_with_count) { .error=OK, .count=delete_count };
+}
+
+maybe_data get_data(data_iterator* iter) {
+    maybe_data dt = init_data(iter->tb);
+    if (!dt.error) return dt;
+
+    dt.value->size = iter->tb->header->row_size;
+    free(dt.value->bytes);
+    dt.value->bytes = iter->cur_data;
+    return dt;
+}
+
 maybe_data_iterator init_iterator(table* tb) {
     data_iterator* iter = malloc(sizeof (data_iterator));
     if (iter == NULL) return (maybe_data_iterator) { .error=MALLOC_ERROR, .value=NULL };
@@ -82,4 +106,8 @@ maybe_data_iterator init_iterator(table* tb) {
     iter->ptr = 0;
     iter->rows_read_on_page = 0;
     return (maybe_data_iterator) { .error=OK, .value=iter };
+}
+
+void release_iterator(data_iterator *iter) {
+    free(iter);
 }

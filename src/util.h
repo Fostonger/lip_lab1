@@ -4,7 +4,8 @@ typedef enum {
     OK = 0,
     MUST_BE_EMPTY,
     MALLOC_ERROR,
-    NOT_ENOUGH_SPACE
+    NOT_ENOUGH_SPACE,
+    DONT_EXIST
 } result;
 
 #define OPTIONAL(STRUCT_NAME)       \
