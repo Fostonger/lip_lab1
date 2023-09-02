@@ -51,3 +51,4 @@ size_t offset_to_column(table_header *tb, const char *column_name, column_type t
 void release_table(table *tb);
 result add_column(table *tb, const char *column_name, column_type type);
 result save_table(database *db, table *tb);
+void print_columns(table_header *tbheader);

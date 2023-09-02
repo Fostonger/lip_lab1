@@ -12,7 +12,7 @@ inline uint8_t type_to_size(column_type type) {
     case FLOAT:
         return sizeof(float);
     case STRING:
-        return sizeof(size_t) * 2; // 1 - номер страницы; 2 - отступ от начала страницы до строки
+        return sizeof(uint64_t) * 2; // 1 - номер страницы; 2 - отступ от начала страницы до строки
     default:
         return 0;
     }
@@ -77,4 +77,19 @@ size_t offset_to_column(table_header *tb_header, const char *column_name, column
         offset += type_to_size(column.type);
     }
     return 0;
+}
+
+void print_columns(table_header *tbheader) {
+    size_t line_lenght = 0;
+    for (size_t column_index = 0; column_index < tbheader->column_amount; column_index++) {
+        column_header header = tbheader->columns[column_index];
+        size_t str_len = strlen(header.name);
+        line_lenght += 7 + str_len + 8 - str_len%8 + 1;
+        printf("\t%s\t|", header.name);
+    }
+    printf("\n");
+    for (size_t i = 0; i < line_lenght; i++) {
+        printf("-");
+    }
+    printf("\n");
 }
