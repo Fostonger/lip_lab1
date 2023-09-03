@@ -31,3 +31,4 @@ void get_float_from_data(data *dt, float *dest, size_t offset);
 void update_string_data_for_row(data *dst, data *src);
 bool has_next_data_on_page(page *cur_page, char *cur_data);
 void print_data(data *dt);
+result join_data(data *dst, data *dt1, data *dt2, const char *column_name, column_type type);

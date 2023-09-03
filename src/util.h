@@ -5,7 +5,8 @@ typedef enum {
     MUST_BE_EMPTY,
     MALLOC_ERROR,
     NOT_ENOUGH_SPACE,
-    DONT_EXIST
+    DONT_EXIST,
+    CROSS_ON_JOIN
 } result;
 
 #define OPTIONAL(STRUCT_NAME)       \

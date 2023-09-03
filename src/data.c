@@ -224,6 +224,28 @@ void get_integer_from_data(data *dt, int32_t *dest, size_t offset) {
     *dest = *((int32_t *) ((char *)dt->bytes + offset));
 }
 
+result join_data(data *dst, data *dt1, data *dt2, const char *column_name, column_type type) {
+    if (dst == NULL || dt1 == NULL || dt2 == NULL || column_name == NULL) return DONT_EXIST;
+    if (dst->bytes == dt1->bytes || dst->bytes == dt2->bytes || dt1->bytes == dt2->bytes) return CROSS_ON_JOIN;
+    if (dst->table->header->column_amount != dt1->table->header->column_amount + dt2->table->header->column_amount - 1)
+        return NOT_ENOUGH_SPACE;
+    
+    if (offset_to_column(dt1->table->header, column_name, type) == -1 || 
+        offset_to_column(dt2->table->header, column_name, type) == -1) {    
+        return DONT_EXIST;
+    }
+
+    memcpy(dst->bytes, dt1->bytes, dt1->size);
+    dst->size += dt1->size;
+
+    size_t offset_to_join_column = offset_to_column(dt2->table->header, column_name, type);
+    memcpy(dst->bytes + dst->size, dt2->bytes, offset_to_join_column);
+    dst->size += offset_to_join_column;
+    size_t index_after_common_column = offset_to_join_column + type_to_size(type);
+    memcpy(dst->bytes + dst->size, dt2->bytes + index_after_common_column, dt2->size - index_after_common_column);
+    return OK;
+}
+
 void get_string_from_data(data *dt, page *first_string_page, char **dest, size_t data_offset) {
     char *string_data_ptr = (char *)dt->bytes + data_offset;
     string_in_table_data *string_in_table = string_data_ptr;

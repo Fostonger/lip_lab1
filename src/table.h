@@ -52,3 +52,4 @@ void release_table(table *tb);
 result add_column(table *tb, const char *column_name, column_type type);
 result save_table(database *db, table *tb);
 void print_columns(table_header *tbheader);
+result join_columns(table *dst, table *tb1, table *tb2, const char *column_name, column_type type);

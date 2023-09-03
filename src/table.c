@@ -76,8 +76,36 @@ size_t offset_to_column(table_header *tb_header, const char *column_name, column
         if (column.type == type && !strcmp(column.name, column_name)) return offset;
         offset += type_to_size(column.type);
     }
-    return 0;
+    return -1;
 }
+
+result join_columns(table *dst, table *tb1, table *tb2, const char *column_name, column_type type) {
+    bool found_in_common = false;
+    for (size_t column_index = 0; column_index < tb1->header->column_amount; column_index++) {
+        column_header header = tb1->header->columns[column_index];
+        add_column(dst, header.name, header.type);
+        if (header.type == type && !strcmp(header.name, column_name)) found_in_common = true;
+    }
+    if (!found_in_common) {
+        release_table(dst);
+        return DONT_EXIST;
+    }
+    found_in_common = false;
+    for (size_t column_index = 0; column_index < tb1->header->column_amount; column_index++) {
+        column_header header = tb1->header->columns[column_index];
+        if (header.type == type && !strcmp(header.name, column_name)) {
+            found_in_common = true;
+            continue;
+        }
+        add_column(dst, header.name, header.type);
+    }
+    if (!found_in_common) {
+        release_table(dst);
+        return DONT_EXIST;
+    }
+    return OK;
+}
+
 
 void print_columns(table_header *tbheader) {
     size_t line_lenght = 0;

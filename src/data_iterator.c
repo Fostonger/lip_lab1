@@ -142,3 +142,103 @@ void release_iterator(data_iterator *iter) {
     free(iter->cur_data);
     free(iter);
 }
+
+bool int_join_func(int32_t *value1, int32_t *value2) {
+    return *value1 == *value2;
+}
+
+bool float_join_func(float *value1, float *value2) {
+    return *value1 == *value2;
+}
+
+bool bool_join_func(bool *value1, bool *value2) {
+    return *value1 == *value2;
+}
+
+bool string_join_func(char *value1, char *value2) {
+    return !strcmp(value1, value2);
+}
+
+closure join_func(const void *value, column_type type) {
+    closure clr;
+    switch (type) {
+    case INT_32:
+        clr.value1 = (int32_t *)&value;
+        clr.func = int_join_func;
+        return clr;
+    case FLOAT:
+        clr.value1 = (float *)&value;
+        clr.func = float_join_func;
+        return clr;
+    case STRING:
+        clr.value1 = (char *)&value;
+        clr.func = string_join_func;
+        return clr;
+    case BOOL:
+        clr.value1 = (bool *)&value;
+        clr.func = bool_join_func;
+        return clr;
+    default:
+        break;
+    }
+}
+
+maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_type type, char *new_table_name) {
+    maybe_table new_tb;
+    maybe_data_iterator iterator1 = init_iterator(tb1);
+    if (iterator1.error) {
+        new_tb = (maybe_table) { .error=iterator1.error, .value=NULL };
+        goto iterator1_release;
+    }
+    maybe_data_iterator iterator2 = init_iterator(tb2);
+    if (iterator2.error) {
+        new_tb = (maybe_table) { .error=iterator2.error, .value=NULL };
+        goto iterator2_release;
+    }
+
+    new_tb = create_table(new_table_name);
+    if (new_tb.error)
+        goto iterator2_release;
+
+    result join_columns_error = join_columns(new_tb.value, tb1, tb2, column_name, type);
+    if (join_columns_error) {
+        new_tb = (maybe_table) { .error=join_columns_error, .value=NULL };
+        goto new_tb_release;
+    }
+
+    size_t offset_to_column1 = offset_to_column(tb1->header, column_name, type);
+
+    maybe_data joined_data = init_data(new_tb.value);
+    if (joined_data.error) {
+        new_tb = (maybe_table) { .error=joined_data.error, .value=new_tb.value };
+        goto new_tb_release;
+    }
+
+    while (has_next(iterator1.value)) {
+        void **value = (char *)iterator1.value->cur_data->bytes + offset_to_column1;
+        closure join_closure = join_func(*value, type);
+
+        while (seek_next_where(iterator2.value, type, column_name, join_closure)) {
+            result join_data_error = join_data(
+                joined_data.value, iterator1.value->cur_data,
+                iterator2.value->cur_data, column_name, type);
+            if (join_data_error) {
+                new_tb = (maybe_table) { .error=join_data_error, .value=new_tb.value };
+                goto joined_data_release;
+            }
+            set_data(joined_data.value);
+        }
+        get_next(iterator1.value);
+    }
+
+joined_data_release:
+    release_data(joined_data.value);
+new_tb_release:
+    release_table(new_tb.value);
+iterator2_release:
+    release_iterator(iterator2.value);
+iterator1_release:
+    release_iterator(iterator1.value);
+    
+    return new_tb;
+}

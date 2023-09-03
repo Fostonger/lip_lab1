@@ -31,9 +31,8 @@ bool string_modify_func(char *value1, char *value2) {
     return !strcmp(value1, value2);
 }
 
-int work_with_second_table() {
-    table *t2 = unwrap_table( create_table("table2") );
-    add_column(t2, "ints on second", INT_32);
+int work_with_second_table(table *t2) {
+    add_column(t2, "ints", INT_32);
     add_column(t2, "bools on second", BOOL);
     add_column(t2, "floats on second", FLOAT);
     add_column(t2, "strings on second", STRING);
@@ -140,6 +139,7 @@ int main(void) {
     // FILE *dbfile = fopen(filename, "r+");
     // database db = unwrap_database(initdb(dbfile));
     table *t1 = unwrap_table( create_table("table1") );
+    table *t2 = unwrap_table( create_table("table2") );
     add_column(t1, "ints", INT_32);
     add_column(t1, "bools", BOOL);
     add_column(t1, "floats", FLOAT);
@@ -241,7 +241,11 @@ int main(void) {
     release_data(data1.value);
     print_table(t1);
 
-    printf("second table returned %d\n", work_with_second_table());
+    printf("second table returned %d\n", work_with_second_table(t2));
+
+    maybe_table joined_tb = join_table(t1, t2, "ints", INT_32, "merged table");
+    if ( !print_if_failure(joined_tb.error) ) return 1;
+    print_table(joined_tb.value);
 
     release_table(t1);
 }
