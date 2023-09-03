@@ -113,6 +113,15 @@ maybe_data_iterator init_iterator(table* tb) {
     return (maybe_data_iterator) { .error=OK, .value=iter };
 }
 
+void reset_iterator(data_iterator *iter, table *tb) {
+    iter->tb = tb;
+    iter->cur_page = tb->first_page;
+    iter->cur_data->bytes = iter->cur_page->data;
+    iter->cur_data->size = iter->tb->header->row_size;
+    iter->ptr = 0;
+    iter->rows_read_on_page = 0;
+}
+
 void release_iterator(data_iterator *iter) {
     free(iter->cur_data);
     free(iter);

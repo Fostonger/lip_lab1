@@ -21,6 +21,7 @@ typedef struct {
 } result_with_count;
 
 maybe_data_iterator init_iterator(table* tb);
+void reset_iterator(data_iterator *iter, table *tb);
 void release_iterator(data_iterator *iter);
 bool seek_next_where(data_iterator* iter, column_type type, const char *column_name, predicate_func predicate_function);
 result_with_count delete_where(table*tb, column_type type, const char *column_name, predicate_func predicate_function);

@@ -100,16 +100,13 @@ int main(void) {
     if (iterator.error) return 1;
     seek_next_where(iterator.value, INT_32, "ints", int_iterator_func);
 
-    iterator = init_iterator(t1);
-    if (iterator.error) return 1;
+    reset_iterator(iterator.value, t1);
     seek_next_where(iterator.value, FLOAT, "floats", float_iterator_func);
 
-    iterator = init_iterator(t1);
-    if (iterator.error) return 1;
+    reset_iterator(iterator.value, t1);
     seek_next_where(iterator.value, BOOL, "bools", bool_iterator_func);
 
-    iterator = init_iterator(t1);
-    if (iterator.error) return 1;
+    reset_iterator(iterator.value, t1);
     seek_next_where(iterator.value, STRING, "strings", sting_iterator_func);
 
     print_table(t1);
