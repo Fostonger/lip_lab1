@@ -1,6 +1,8 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "data_iterator.h"
+#include "functional.h"
 
 void get_integer(data_iterator *iter, int32_t *dest, size_t offset) {
     get_integer_from_data(iter->cur_data, dest, offset);
@@ -29,7 +31,7 @@ void get_next(data_iterator *iter) {
     iter->cur_data->bytes = (char *)iter->cur_data->bytes + iter->tb->header->row_size;
 }
 
-bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, predicate_func predicate_function) {
+bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, closure clr) {
     if (!has_next(iter)) return false;
 
     iter->cur_data->bytes = (char *)iter->cur_page->data;
@@ -48,19 +50,19 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
         switch (type) {
         case INT_32:
             get_integer(iter, &int_value, offset);
-            if ( predicate_function(&int_value) ) return true;
+            if ( clr.func(clr.value1, &int_value) ) return true;
             break;
         case FLOAT:
             get_float(iter, &float_value, offset);
-            if ( predicate_function(&float_value) ) return true;
+            if ( clr.func(clr.value1, &float_value) ) return true;
             break;
         case BOOL:
             get_bool(iter, &bool_value, offset);
-            if ( predicate_function(&bool_value) ) return true;
+            if ( clr.func(clr.value1, &bool_value) ) return true;
             break;
         case STRING:
             get_string(iter, &string_value, offset);
-            if ( predicate_function(string_value) ) return true;
+            if ( clr.func(clr.value1, string_value) ) return true;
             break;
         default:
             break;
@@ -71,11 +73,11 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
     return false;
 }
 
-result_with_count update_where(table* tb, column_type type, const char *column_name, predicate_func find_function, data *update_val) {
+result_with_count update_where(table* tb, column_type type, const char *column_name, closure clr, data *update_val) {
     maybe_data_iterator iterator = init_iterator(tb);
     if (iterator.error) return (result_with_count) { .error=iterator.error, .count=0 };
     int16_t update_count = 0;
-    while (seek_next_where(iterator.value, type, column_name, find_function)) {
+    while (seek_next_where(iterator.value, type, column_name, clr)) {
         data *data_to_update = iterator.value->cur_data;
         update_string_data_for_row(data_to_update, update_val);
         update_count++;
@@ -98,11 +100,11 @@ void print_table(table *tb) {
     printf("\n");
 }
 
-result_with_count delete_where(table *tb, column_type type, const char *column_name, predicate_func predicate_function) {
+result_with_count delete_where(table *tb, column_type type, const char *column_name, closure clr) {
     maybe_data_iterator iterator = init_iterator(tb);
     if (iterator.error) return (result_with_count) { .error=iterator.error, .count=0 };
     int16_t delete_count = 0;
-    while (seek_next_where(iterator.value, type, column_name, predicate_function)) {
+    while (seek_next_where(iterator.value, type, column_name, clr)) {
         data *data_to_delete = iterator.value->cur_data;
         delete_saved_row(data_to_delete);
         delete_count++;

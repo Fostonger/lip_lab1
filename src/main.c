@@ -7,32 +7,28 @@
 #include "data.h"
 #include "data_iterator.h"
 
-bool int_iterator_func(int32_t *value) {
-    printf("catched int value: %d\n", *value);
+bool int_iterator_func(int32_t *value1, int32_t *value2) {
+    printf("catched int value: %d\n", *value2);
     return 0;
 }
 
-bool float_iterator_func(float *value) {
-    printf("catched float value: %f\n", *value);
+bool float_iterator_func(float *value1, float *value2) {
+    printf("catched float value: %f\n", *value2);
     return 0;
 }
 
-bool bool_iterator_func(bool *value) {
-    printf("catched bool value: %s\n", *value ? "TRUE" : "FALSE");
+bool bool_iterator_func(bool *value1, bool *value2) {
+    printf("catched bool value: %s\n", *value2 ? "TRUE" : "FALSE");
     return 0;
 }
 
-bool sting_iterator_func(char *value) {
-    printf("catched string value: %s\n", value);
+bool sting_iterator_func(char *value1, char *value2) {
+    printf("catched string value: %s\n", value2);
     return 0;
 }
 
-bool string_delete_func(char *value) {
-    return !strcmp(value, "string test");
-}
-
-bool string_update_func(char *value) {
-    return !strcmp(value, "zinger string");
+bool string_modify_func(char *value1, char *value2) {
+    return !strcmp(value1, value2);
 }
 
 int work_with_second_table() {
@@ -111,24 +107,11 @@ int work_with_second_table() {
     }
     clear_data(data2.value);
 
-    maybe_data_iterator iterator = init_iterator(t2);
-    if (iterator.error) return 1;
-    seek_next_where(iterator.value, INT_32, "ints on second", int_iterator_func);
-
-    reset_iterator(iterator.value, t2);
-    seek_next_where(iterator.value, FLOAT, "floats on second", float_iterator_func);
-
-    reset_iterator(iterator.value, t2);
-    seek_next_where(iterator.value, BOOL, "bools on second", bool_iterator_func);
-
-    reset_iterator(iterator.value, t2);
-    seek_next_where(iterator.value, STRING, "strings on second", sting_iterator_func);
-
-    release_iterator(iterator.value);
-
     print_table(t2);
 
-    printf("deleted %d rows\n", delete_where(t2, STRING, "strings on second", string_delete_func).count);
+    closure delete_closure = (closure) { .func=string_modify_func, .value1="string test" };
+
+    printf("deleted %d rows\n", delete_where(t2, STRING, "strings on second", delete_closure).count);
 
     print_table(t2);
 
@@ -142,7 +125,9 @@ int work_with_second_table() {
             return 1;
     }
 
-    printf("updated %d rows\n", update_where(t2, STRING, "strings on second", string_update_func, data2.value).count);
+    closure update_closure = (closure) { .func=string_modify_func, .value1="zinger string" };
+
+    printf("updated %d rows\n", update_where(t2, STRING, "strings on second", update_closure, data2.value).count);
 
     release_data(data2.value);
 
@@ -216,22 +201,27 @@ int main(void) {
 
     maybe_data_iterator iterator = init_iterator(t1);
     if (iterator.error) return 1;
-    seek_next_where(iterator.value, INT_32, "ints", int_iterator_func);
+    closure print_all = (closure) { .func=int_iterator_func, .value1=0};
+    seek_next_where(iterator.value, INT_32, "ints", print_all);
 
     reset_iterator(iterator.value, t1);
-    seek_next_where(iterator.value, FLOAT, "floats", float_iterator_func);
+    print_all = (closure) { .func=float_iterator_func, .value1=0};
+    seek_next_where(iterator.value, FLOAT, "floats", print_all);
 
     reset_iterator(iterator.value, t1);
-    seek_next_where(iterator.value, BOOL, "bools", bool_iterator_func);
+    print_all = (closure) { .func=bool_iterator_func, .value1=0};
+    seek_next_where(iterator.value, BOOL, "bools", print_all);
 
     reset_iterator(iterator.value, t1);
-    seek_next_where(iterator.value, STRING, "strings", sting_iterator_func);
+    print_all = (closure) { .func=sting_iterator_func, .value1=""};
+    seek_next_where(iterator.value, STRING, "strings", print_all);
 
     release_iterator(iterator.value);
 
     print_table(t1);
 
-    printf("deleted %d rows\n", delete_where(t1, STRING, "strings", string_delete_func).count);
+    closure delete_closure = (closure) { .func=string_modify_func, .value1="string test" };
+    printf("deleted %d rows\n", delete_where(t1, STRING, "strings", delete_closure).count);
 
     print_table(t1);
 
@@ -245,7 +235,8 @@ int main(void) {
             return 1;
     }
 
-    printf("updated %d rows\n", update_where(t1, STRING, "strings", string_update_func, data1.value).count);
+    closure update_closure = (closure) { .func=string_modify_func, .value1="zinger string" };
+    printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
 
     release_data(data1.value);
     print_table(t1);

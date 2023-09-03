@@ -2,6 +2,7 @@
 
 #include "table.h"
 #include "data.h"
+#include "functional.h"
 
 typedef struct {
     table* tb;
@@ -13,8 +14,6 @@ typedef struct {
 
 OPTIONAL(data_iterator)
 
-// функция, по которой будет решаться, искомый ли это элемент
-typedef bool (*predicate_func)(const void **);
 typedef struct {
     result error;
     int16_t count;
@@ -23,8 +22,8 @@ typedef struct {
 maybe_data_iterator init_iterator(table* tb);
 void reset_iterator(data_iterator *iter, table *tb);
 void release_iterator(data_iterator *iter);
-bool seek_next_where(data_iterator* iter, column_type type, const char *column_name, predicate_func predicate_function);
-result_with_count delete_where(table*tb, column_type type, const char *column_name, predicate_func predicate_function);
-result_with_count update_where(table* tb, column_type type, const char *column_name, predicate_func find_function, data *updateVal);
-maybe_table join_table(table* tb1, table* tb2, const char* column_name_1, const char* column_name_2, column_type type);
+bool seek_next_where(data_iterator* iter, column_type type, const char *column_name, closure predicate_closure);
+result_with_count delete_where(table*tb, column_type type, const char *column_name, closure predicate_closure);
+result_with_count update_where(table* tb, column_type type, const char *column_name, closure predicate_closure, data *updateVal);
+maybe_table join_table(table* tb1, table* tb2, const char* column_name, column_type type, char *new_table_name);
 void print_table(table *tb);
