@@ -109,6 +109,8 @@ int main(void) {
     reset_iterator(iterator.value, t1);
     seek_next_where(iterator.value, STRING, "strings", sting_iterator_func);
 
+    release_iterator(iterator.value);
+
     print_table(t1);
 
     printf("deleted %d rows\n", delete_where(t1, STRING, "strings", string_delete_func).count);
