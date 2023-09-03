@@ -93,6 +93,21 @@ result data_init_float(data *dt, float val) {
     return OK;
 }
 
+result data_init_any(data *dt, const any_value val, column_type type) {
+    switch (type) {
+    case INT_32:
+        return data_init_integer(dt, val.int_value);
+    case FLOAT:
+        return data_init_float(dt, val.float_value);
+    case BOOL:
+        return data_init_boolean(dt, val.bool_value);
+    case STRING:
+        return data_init_string(dt, val.string_value);
+    default:
+        break;
+    }
+}
+
 string_in_storage *get_next_string_data_on_page(string_in_storage *prev_string, page *pg_with_string_data) {
     if (!prev_string || !pg_with_string_data) return NULL;
     if (prev_string->page != pg_with_string_data->pgheader->page_number) return NULL;
@@ -139,6 +154,37 @@ result set_data(data *dt) {
     memcpy(table_ptr, data_ptr, dt->size);
 
     dt->table->first_page_to_write->pgheader->rows_count += 1;
+
+    return OK;
+}
+
+result join_data(data *dst, data *dt1, data *dt2, const char *column_name, column_type type) {
+    if (dst == NULL || dt1 == NULL || dt2 == NULL || column_name == NULL) return DONT_EXIST;
+    if (dst->bytes == dt1->bytes || dst->bytes == dt2->bytes || dt1->bytes == dt2->bytes) return CROSS_ON_JOIN;
+    if (dst->table->header->column_amount != dt1->table->header->column_amount + dt2->table->header->column_amount - 1)
+        return NOT_ENOUGH_SPACE;
+    
+    if (offset_to_column(dt1->table->header, column_name, type) == -1 || 
+        offset_to_column(dt2->table->header, column_name, type) == -1) {    
+        return DONT_EXIST;
+    }
+
+    for (size_t column_index = 0; column_index < dt1->table->header->column_amount; column_index++) {
+        column_header header = dt1->table->header->columns[column_index];
+        size_t offset = offset_to_column(dt1->table->header, header.name, header.type);
+        any_value val;
+        get_any_from_data(dt1, &val, offset, header.type);
+        data_init_any(dst, val, header.type);
+    }
+
+    for (size_t column_index = 0; column_index < dt2->table->header->column_amount; column_index++) {
+        column_header header = dt2->table->header->columns[column_index];
+        if (header.type == type && !strcmp(column_name, header.name)) continue;
+        size_t offset = offset_to_column(dt2->table->header, header.name, header.type);
+        any_value val;
+        get_any_from_data(dt2, &val, offset, header.type);
+        data_init_any(dst, val, header.type);
+    }
 
     return OK;
 }
@@ -224,32 +270,10 @@ void get_integer_from_data(data *dt, int32_t *dest, size_t offset) {
     *dest = *((int32_t *) ((char *)dt->bytes + offset));
 }
 
-result join_data(data *dst, data *dt1, data *dt2, const char *column_name, column_type type) {
-    if (dst == NULL || dt1 == NULL || dt2 == NULL || column_name == NULL) return DONT_EXIST;
-    if (dst->bytes == dt1->bytes || dst->bytes == dt2->bytes || dt1->bytes == dt2->bytes) return CROSS_ON_JOIN;
-    if (dst->table->header->column_amount != dt1->table->header->column_amount + dt2->table->header->column_amount - 1)
-        return NOT_ENOUGH_SPACE;
-    
-    if (offset_to_column(dt1->table->header, column_name, type) == -1 || 
-        offset_to_column(dt2->table->header, column_name, type) == -1) {    
-        return DONT_EXIST;
-    }
-
-    memcpy(dst->bytes, dt1->bytes, dt1->size);
-    dst->size += dt1->size;
-
-    size_t offset_to_join_column = offset_to_column(dt2->table->header, column_name, type);
-    memcpy(dst->bytes + dst->size, dt2->bytes, offset_to_join_column);
-    dst->size += offset_to_join_column;
-    size_t index_after_common_column = offset_to_join_column + type_to_size(type);
-    memcpy(dst->bytes + dst->size, dt2->bytes + index_after_common_column, dt2->size - index_after_common_column);
-    return OK;
-}
-
-void get_string_from_data(data *dt, page *first_string_page, char **dest, size_t data_offset) {
+void get_string_from_data(data *dt, char **dest, size_t data_offset) {
     char *string_data_ptr = (char *)dt->bytes + data_offset;
     string_in_table_data *string_in_table = string_data_ptr;
-    maybe_page page_with_string = get_page_by_number(first_string_page, string_in_table->string_page_number);
+    maybe_page page_with_string = get_page_by_number(dt->table->first_string_page, string_in_table->string_page_number);
     if (page_with_string.error) return;
     string_in_storage *target_string = (string_in_storage *)((char *)page_with_string.value->data + string_in_table->offset);
     *dest = target_string->string;
@@ -261,6 +285,25 @@ void get_bool_from_data(data *dt, bool *dest, size_t offset) {
 
 void get_float_from_data(data *dt, float *dest, size_t offset) {
     *dest = *((const float *) ((char *)dt->bytes + offset));
+}
+
+void get_any_from_data(data *dt, any_value *dest, size_t offset, column_type type) {
+    switch (type) {
+    case INT_32:
+        get_integer_from_data(dt, &(dest->int_value), offset);
+        break;
+    case FLOAT:
+        get_float_from_data(dt, &(dest->float_value), offset);
+        break;
+    case BOOL:
+        get_bool_from_data(dt, &(dest->bool_value), offset);
+        break;
+    case STRING:
+        get_string_from_data(dt, &(dest->string_value), offset);
+        break;
+    default:
+        break;
+    }
 }
 
 void print_data(data *dt) {
@@ -286,7 +329,7 @@ void print_data(data *dt) {
             printf("\t%s\t|", bool_value ? "TRUE" : "FALSE");
             break;
         case STRING:
-            get_string_from_data(dt, dt->table->first_string_page, &string_value, dt->size);
+            get_string_from_data(dt, &string_value, dt->size);
             printf("\t%s\t|", string_value);
             break;
         default:

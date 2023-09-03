@@ -9,7 +9,7 @@ void get_integer(data_iterator *iter, int32_t *dest, size_t offset) {
 }
 
 void get_string(data_iterator *iter, char **dest, size_t data_offset) {
-    get_string_from_data(iter->cur_data, iter->tb->first_string_page, dest, data_offset);
+    get_string_from_data(iter->cur_data, dest, data_offset);
 }
 
 void get_bool(data_iterator *iter, bool *dest, size_t offset) {
@@ -203,7 +203,8 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
     result join_columns_error = join_columns(new_tb.value, tb1, tb2, column_name, type);
     if (join_columns_error) {
         new_tb = (maybe_table) { .error=join_columns_error, .value=NULL };
-        goto new_tb_release;
+        release_table(new_tb.value);
+        goto joined_data_release;
     }
 
     size_t offset_to_column1 = offset_to_column(tb1->header, column_name, type);
@@ -211,7 +212,7 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
     maybe_data joined_data = init_data(new_tb.value);
     if (joined_data.error) {
         new_tb = (maybe_table) { .error=joined_data.error, .value=new_tb.value };
-        goto new_tb_release;
+        goto joined_data_release;
     }
 
     while (has_next(iterator1.value)) {
@@ -226,15 +227,17 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
                 new_tb = (maybe_table) { .error=join_data_error, .value=new_tb.value };
                 goto joined_data_release;
             }
-            set_data(joined_data.value);
+            result set_data_error = set_data(joined_data.value);
+            if (join_data_error) {
+                new_tb = (maybe_table) { .error=set_data_error, .value=new_tb.value };
+                goto joined_data_release;
+            }
         }
         get_next(iterator1.value);
     }
 
 joined_data_release:
     release_data(joined_data.value);
-new_tb_release:
-    release_table(new_tb.value);
 iterator2_release:
     release_iterator(iterator2.value);
 iterator1_release:
