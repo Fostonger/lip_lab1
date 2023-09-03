@@ -71,6 +71,20 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
     return false;
 }
 
+result_with_count update_where(table* tb, column_type type, const char *column_name, predicate_func find_function, data *update_val) {
+    maybe_data_iterator iterator = init_iterator(tb);
+    if (iterator.error) return (result_with_count) { .error=iterator.error, .count=0 };
+    int16_t update_count = 0;
+    while (seek_next_where(iterator.value, type, column_name, find_function)) {
+        data *data_to_update = iterator.value->cur_data;
+        update_string_data_for_row(data_to_update, update_val);
+        update_count++;
+    }
+
+    release_iterator(iterator.value);
+    return (result_with_count) { .error=OK, .count=update_count };
+}
+
 void print_table(table *tb) {
     maybe_data_iterator iterator = init_iterator(tb);
     if (iterator.error) return;

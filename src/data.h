@@ -28,6 +28,6 @@ void get_integer_from_data(data *dt, int32_t *dest, size_t offset);
 void get_string_from_data(data *dt, page *first_string_page, char **dest, size_t data_offset);
 void get_bool_from_data(data *dt, bool *dest, size_t offset);
 void get_float_from_data(data *dt, float *dest, size_t offset);
-void update_string_data_for_row(data *dt, void **row_start_in_table);
+void update_string_data_for_row(data *dst, data *src);
 bool has_next_data_on_page(page *cur_page, char *cur_data);
 void print_data(data *dt);

@@ -203,16 +203,21 @@ result delete_strings_from_row(data *dt) {
 }
 
 result delete_saved_row(data *dt) {
-    result delete_string_result = delete_strings_from_row(dt);
-    if (delete_string_result) return delete_string_result;
+    // result delete_string_result = delete_strings_from_row(dt);
+    // if (delete_string_result) return delete_string_result;
     dt->table->first_page_to_write->pgheader->rows_count -= 1;
 
     void *data_ptr = dt->bytes;
     void *table_ptr = dt->table->first_page_to_write->data
                             + dt->table->first_page_to_write->pgheader->rows_count * dt->table->header->row_size;
-    memcpy(data_ptr, table_ptr, dt->size);
+    if (data_ptr != table_ptr) memcpy(data_ptr, table_ptr, dt->size);
 
     return OK;
+}
+
+void update_string_data_for_row(data *dst, data *src) {
+    delete_saved_row(dst);
+    set_data(src);
 }
 
 void get_integer_from_data(data *dt, int32_t *dest, size_t offset) {
