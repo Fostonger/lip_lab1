@@ -51,7 +51,7 @@ result data_init_integer(data *dt, int32_t val) {
 
 result data_init_string(data *dt, const char* val) {
     if (dt->size + type_to_size(STRING) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
-    char *ptr = (char *)dt->bytes + dt->size;
+    char *ptr = dt->bytes + dt->size;
     dt->size += type_to_size(STRING);
 
     size_t string_len = strlen(val);
@@ -63,7 +63,7 @@ result data_init_string(data *dt, const char* val) {
     page *writable_page = suitable_page.value;
 
     // Данные о строке заносим в таблицу: ссылка на страницу, в которой хранится строка, и отступ от начала страницы
-    string_in_table_data *string_in_table = ptr;
+    string_in_table_data *string_in_table = (string_in_table_data *)ptr;
     string_in_table->offset = writable_page->pgheader->data_offset;
     string_in_table->string_page_number = writable_page->pgheader->page_number;
 
@@ -112,7 +112,7 @@ string_in_storage *get_next_string_data_on_page(string_in_storage *prev_string, 
     if (!prev_string || !pg_with_string_data) return NULL;
     if (prev_string->page != pg_with_string_data->pgheader->page_number) return NULL;
 
-    string_in_storage *next_string = (char *)prev_string + sizeof(string_in_storage) + prev_string->str_len + 1;
+    string_in_storage *next_string = (string_in_storage *)((char *)prev_string + sizeof(string_in_storage) + prev_string->str_len + 1);
     // Проверка, не является ли prev_string последней строкой на странице
     if ( (char *)next_string >= (char *)pg_with_string_data->data + pg_with_string_data->pgheader->data_offset ) return NULL;
     return (string_in_storage *)next_string;
@@ -143,7 +143,7 @@ result set_data(data *dt) {
     result is_enough_space = ensure_enough_space_table(dt->table, dt->size);
     if (is_enough_space) return is_enough_space;
 
-    void **data_ptr = dt->bytes;
+    char *data_ptr = dt->bytes;
 
     page *pg_to_write = dt->table->first_page_to_write;
     uint64_t offset_to_row = pg_to_write->pgheader->rows_count * dt->table->header->row_size;
@@ -271,7 +271,7 @@ void get_integer_from_data(data *dt, int32_t *dest, size_t offset) {
 }
 
 void get_string_from_data(data *dt, char **dest, size_t data_offset) {
-    char *string_data_ptr = (char *)dt->bytes + data_offset;
+    string_in_table_data *string_data_ptr = (string_in_table_data *)((char *)dt->bytes + data_offset);
     string_in_table_data *string_in_table = string_data_ptr;
     maybe_page page_with_string = get_page_by_number(dt->table->first_string_page, string_in_table->string_page_number);
     if (page_with_string.error) return;
@@ -307,35 +307,29 @@ void get_any_from_data(data *dt, any_value *dest, size_t offset, column_type typ
 }
 
 void print_data(data *dt) {
-    dt->size = 0;
-    int32_t int_value;
-    float float_value;
-    int8_t bool_value;
-    char *string_value = NULL;
+    size_t offset = 0;
     for (size_t column_index = 0; column_index < dt->table->header->column_amount; column_index++) {
         column_header header = dt->table->header->columns[column_index];
         
+        any_value value;
+        get_any_from_data(dt, &value, offset, header.type);
         switch (header.type) {
         case INT_32:
-            get_integer_from_data(dt, &int_value, dt->size);
-            printf("\t%d\t|", int_value);
+            printf("\t%d\t|", value.int_value);
             break;
         case FLOAT:
-            get_float_from_data(dt, &float_value, dt->size);
-            printf("\t%f\t|", float_value);
+            printf("\t%f\t|", value.float_value);
             break;
         case BOOL:
-            get_bool_from_data(dt, &bool_value, dt->size);
-            printf("\t%s\t|", bool_value ? "TRUE" : "FALSE");
+            printf("\t%s\t|", value.bool_value ? "TRUE" : "FALSE");
             break;
         case STRING:
-            get_string_from_data(dt, &string_value, dt->size);
-            printf("\t%s\t|", string_value);
+            printf("\t%s\t|", value.string_value);
             break;
         default:
             break;
         }
-        dt->size += type_to_size(header.type);
+        offset += type_to_size(header.type);
     }
     printf("\n");
 }

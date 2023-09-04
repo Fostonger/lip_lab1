@@ -3,7 +3,7 @@
 
 #include "table.h"
 
-inline uint8_t type_to_size(column_type type) {
+uint8_t type_to_size(column_type type) {
     switch (type) {
     case INT_32:
         return sizeof(int32_t);

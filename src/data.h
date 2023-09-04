@@ -8,7 +8,7 @@
 
 typedef struct {
     table *table;
-    void **bytes;
+    char *bytes;
     uint16_t size;
 } data;
 
@@ -16,7 +16,7 @@ typedef struct {
     union{
         int32_t int_value;
         float float_value;
-        int8_t bool_value;
+        bool bool_value;
         char *string_value;
     };
 } any_value;

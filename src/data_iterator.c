@@ -10,13 +10,13 @@ void get_any(data_iterator *iter, any_value *dest, size_t offset, column_type ty
 
 bool has_next(data_iterator *iter) {
     page *cur_page = iter->cur_page;
-    void **cur_data = iter->cur_data->bytes;
+    char *cur_data = iter->cur_data->bytes;
 
     return has_next_data_on_page(cur_page, cur_data) || cur_page->next_page != NULL;
 }
 
 void get_next(data_iterator *iter) {
-    iter->cur_data->bytes = (char *)iter->cur_data->bytes + iter->tb->header->row_size;
+    iter->cur_data->bytes = iter->cur_data->bytes + iter->tb->header->row_size;
 }
 
 bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, closure clr) {
@@ -26,7 +26,7 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
     size_t offset = offset_to_column(iter->tb->header, column_name, type);
     
     while (has_next(iter)) {
-        if ((char *)iter->cur_data->bytes - (char *)iter->cur_page->data > PAGE_SIZE) {
+        if (iter->cur_data->bytes - (char *)iter->cur_page->data > PAGE_SIZE) {
             iter->cur_page = iter->cur_page->next_page;
             iter->cur_data->bytes = iter->cur_page->data;
         }
