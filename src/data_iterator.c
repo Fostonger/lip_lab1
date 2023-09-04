@@ -4,20 +4,8 @@
 #include "data_iterator.h"
 #include "functional.h"
 
-void get_integer(data_iterator *iter, int32_t *dest, size_t offset) {
-    get_integer_from_data(iter->cur_data, dest, offset);
-}
-
-void get_string(data_iterator *iter, char **dest, size_t data_offset) {
-    get_string_from_data(iter->cur_data, dest, data_offset);
-}
-
-void get_bool(data_iterator *iter, bool *dest, size_t offset) {
-    get_bool_from_data(iter->cur_data, dest, offset);
-}
-
-void get_float(data_iterator *iter, float *dest, size_t offset) {
-    get_float_from_data(iter->cur_data, dest, offset);
+void get_any(data_iterator *iter, any_value *dest, size_t offset, column_type type) {
+    get_any_from_data(iter->cur_data, dest, offset, type);
 }
 
 bool has_next(data_iterator *iter) {
@@ -34,39 +22,19 @@ void get_next(data_iterator *iter) {
 bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, closure clr) {
     if (!has_next(iter)) return false;
 
-    iter->cur_data->bytes = (char *)iter->cur_page->data;
+    // iter->cur_data->bytes = iter->cur_page->data;
     size_t offset = offset_to_column(iter->tb->header, column_name, type);
     
-    int32_t int_value;
-    float float_value;
-    int8_t bool_value;
-    char *string_value = NULL;
     while (has_next(iter)) {
         if ((char *)iter->cur_data->bytes - (char *)iter->cur_page->data > PAGE_SIZE) {
             iter->cur_page = iter->cur_page->next_page;
             iter->cur_data->bytes = iter->cur_page->data;
         }
 
-        switch (type) {
-        case INT_32:
-            get_integer(iter, &int_value, offset);
-            if ( clr.func(clr.value1, &int_value) ) return true;
-            break;
-        case FLOAT:
-            get_float(iter, &float_value, offset);
-            if ( clr.func(clr.value1, &float_value) ) return true;
-            break;
-        case BOOL:
-            get_bool(iter, &bool_value, offset);
-            if ( clr.func(clr.value1, &bool_value) ) return true;
-            break;
-        case STRING:
-            get_string(iter, &string_value, offset);
-            if ( clr.func(clr.value1, string_value) ) return true;
-            break;
-        default:
-            break;
-        }
+        any_value value;
+        get_any(iter, &value, offset, type);
+
+        if ( clr.func(&clr.value1, &value) ) return true;
 
         get_next(iter);
     }
@@ -143,39 +111,36 @@ void release_iterator(data_iterator *iter) {
     free(iter);
 }
 
-bool int_join_func(int32_t *value1, int32_t *value2) {
-    return *value1 == *value2;
+bool int_join_func(any_value *value1, any_value *value2) {
+    return value1->int_value == value2->int_value;
 }
 
-bool float_join_func(float *value1, float *value2) {
-    return *value1 == *value2;
+bool float_join_func(any_value *value1, any_value *value2) {
+    return value1->float_value == value2->float_value;
 }
 
-bool bool_join_func(bool *value1, bool *value2) {
-    return *value1 == *value2;
+bool bool_join_func(any_value *value1, any_value *value2) {
+    return value1->bool_value ^ value2->bool_value;
 }
 
-bool string_join_func(char *value1, char *value2) {
-    return !strcmp(value1, value2);
+bool string_join_func(any_value *value1, any_value *value2) {
+    return !strcmp(value1->string_value, value2->string_value);
 }
 
-closure join_func(const void *value, column_type type) {
+closure join_func(any_value value, column_type type) {
     closure clr;
+    clr.value1 = value;
     switch (type) {
     case INT_32:
-        clr.value1 = (int32_t *)&value;
         clr.func = int_join_func;
         return clr;
     case FLOAT:
-        clr.value1 = (float *)&value;
         clr.func = float_join_func;
         return clr;
     case STRING:
-        clr.value1 = (char *)&value;
         clr.func = string_join_func;
         return clr;
     case BOOL:
-        clr.value1 = (bool *)&value;
         clr.func = bool_join_func;
         return clr;
     default:
@@ -216,8 +181,9 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
     }
 
     while (has_next(iterator1.value)) {
-        void **value = (char *)iterator1.value->cur_data->bytes + offset_to_column1;
-        closure join_closure = join_func(*value, type);
+        any_value val1;
+        get_any_from_data(iterator1.value->cur_data, &val1, offset_to_column1, type);
+        closure join_closure = join_func(val1, type);
 
         while (seek_next_where(iterator2.value, type, column_name, join_closure)) {
             result join_data_error = join_data(
@@ -232,7 +198,10 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
                 new_tb = (maybe_table) { .error=set_data_error, .value=new_tb.value };
                 goto joined_data_release;
             }
+            clear_data(joined_data.value);
+            get_next(iterator2.value);
         }
+        reset_iterator(iterator2.value, tb2);
         get_next(iterator1.value);
     }
 

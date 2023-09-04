@@ -17,7 +17,7 @@ typedef struct {
         int32_t int_value;
         float float_value;
         int8_t bool_value;
-        char *string_value
+        char *string_value;
     };
 } any_value;
 

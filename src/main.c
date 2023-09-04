@@ -7,28 +7,28 @@
 #include "data.h"
 #include "data_iterator.h"
 
-bool int_iterator_func(int32_t *value1, int32_t *value2) {
-    printf("catched int value: %d\n", *value2);
+bool int_iterator_func(any_value *value1, any_value *value2) {
+    printf("catched int value: %d\n", value2->int_value);
     return 0;
 }
 
-bool float_iterator_func(float *value1, float *value2) {
-    printf("catched float value: %f\n", *value2);
+bool float_iterator_func(any_value *value1, any_value *value2) {
+    printf("catched float value: %f\n", value2->float_value);
     return 0;
 }
 
-bool bool_iterator_func(bool *value1, bool *value2) {
-    printf("catched bool value: %s\n", *value2 ? "TRUE" : "FALSE");
+bool bool_iterator_func(any_value *value1, any_value *value2) {
+    printf("catched bool value: %s\n", value2->bool_value ? "TRUE" : "FALSE");
     return 0;
 }
 
-bool sting_iterator_func(char *value1, char *value2) {
-    printf("catched string value: %s\n", value2);
+bool sting_iterator_func(any_value *value1, any_value *value2) {
+    printf("catched string value: %s\n", value2->string_value);
     return 0;
 }
 
-bool string_modify_func(char *value1, char *value2) {
-    return !strcmp(value1, value2);
+bool string_modify_func(any_value *value1, any_value *value2) {
+    return !strcmp(value1->string_value, value2->string_value);
 }
 
 int work_with_second_table(table *t2) {
@@ -90,7 +90,7 @@ int work_with_second_table(table *t2) {
     }
     clear_data(data2.value);
 
-    if  (   !print_if_failure( data_init_integer(data2.value, 9999) ) 
+    if  (   !print_if_failure( data_init_integer(data2.value, 300) ) 
         ||  !print_if_failure( data_init_boolean(data2.value, 2) )
         ||  !print_if_failure( data_init_float(data2.value, 0.00001) )
         ||  !print_if_failure( data_init_string(data2.value, "contraversary row string") ) ) {
@@ -108,13 +108,13 @@ int work_with_second_table(table *t2) {
 
     print_table(t2);
 
-    closure delete_closure = (closure) { .func=string_modify_func, .value1="string test" };
+    closure delete_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="string test" } };
 
     printf("deleted %d rows\n", delete_where(t2, STRING, "strings on second", delete_closure).count);
 
     print_table(t2);
 
-    if  (   !print_if_failure( data_init_integer(data2.value, 31100) ) 
+    if  (   !print_if_failure( data_init_integer(data2.value, 20) ) 
         ||  !print_if_failure( data_init_boolean(data2.value, 0) )
         ||  !print_if_failure( data_init_float(data2.value, 1115.68) )
         ||  !print_if_failure( data_init_string(data2.value, "zinger string updated") ) ) {
@@ -124,7 +124,7 @@ int work_with_second_table(table *t2) {
             return 1;
     }
 
-    closure update_closure = (closure) { .func=string_modify_func, .value1="zinger string" };
+    closure update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string" } };
 
     printf("updated %d rows\n", update_where(t2, STRING, "strings on second", update_closure, data2.value).count);
 
@@ -213,14 +213,14 @@ int main(void) {
     seek_next_where(iterator.value, BOOL, "bools", print_all);
 
     reset_iterator(iterator.value, t1);
-    print_all = (closure) { .func=sting_iterator_func, .value1=""};
+    print_all = (closure) { .func=sting_iterator_func, .value1=(any_value){ .string_value="" } };
     seek_next_where(iterator.value, STRING, "strings", print_all);
 
     release_iterator(iterator.value);
 
     print_table(t1);
 
-    closure delete_closure = (closure) { .func=string_modify_func, .value1="string test" };
+    closure delete_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="string test" } };
     printf("deleted %d rows\n", delete_where(t1, STRING, "strings", delete_closure).count);
 
     print_table(t1);
@@ -235,7 +235,7 @@ int main(void) {
             return 1;
     }
 
-    closure update_closure = (closure) { .func=string_modify_func, .value1="zinger string" };
+    closure update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string" } };
     printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
 
     release_data(data1.value);

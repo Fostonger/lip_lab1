@@ -91,8 +91,8 @@ result join_columns(table *dst, table *tb1, table *tb2, const char *column_name,
         return DONT_EXIST;
     }
     found_in_common = false;
-    for (size_t column_index = 0; column_index < tb1->header->column_amount; column_index++) {
-        column_header header = tb1->header->columns[column_index];
+    for (size_t column_index = 0; column_index < tb2->header->column_amount; column_index++) {
+        column_header header = tb2->header->columns[column_index];
         if (header.type == type && !strcmp(header.name, column_name)) {
             found_in_common = true;
             continue;
