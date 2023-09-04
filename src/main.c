@@ -31,6 +31,10 @@ bool string_modify_func(any_value *value1, any_value *value2) {
     return !strcmp(value1->string_value, value2->string_value);
 }
 
+bool filter_func(any_value *value1, any_value *value2) {
+    return value1->int_value < value2->int_value;
+}
+
 int work_with_second_table(table *t2) {
     add_column(t2, "ints", INT_32);
     add_column(t2, "bools on second", BOOL);
@@ -107,6 +111,12 @@ int work_with_second_table(table *t2) {
     clear_data(data2.value);
 
     print_table(t2);
+
+    closure filter_closure = (closure) { .func=filter_func, .value1=(any_value){ .int_value=200 } };
+    maybe_table filtered_tb = filter_table(t2, INT_32, "ints", filter_closure);
+    if ( !print_if_failure(filtered_tb.error) ) return 1;
+    printf("filtered table2:\n");
+    print_table(filtered_tb.value);
 
     closure delete_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="string test" } };
 

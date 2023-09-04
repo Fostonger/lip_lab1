@@ -26,4 +26,5 @@ bool seek_next_where(data_iterator* iter, column_type type, const char *column_n
 result_with_count delete_where(table*tb, column_type type, const char *column_name, closure predicate_closure);
 result_with_count update_where(table* tb, column_type type, const char *column_name, closure predicate_closure, data *updateVal);
 maybe_table join_table(table* tb1, table* tb2, const char* column_name, column_type type, char *new_table_name);
+maybe_table filter_table(table*tb, column_type type, const char *column_name, closure predicate_closure);
 void print_table(table *tb);

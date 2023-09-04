@@ -41,4 +41,5 @@ void get_any_from_data(data *dt, any_value *dest, size_t offset, column_type typ
 void update_string_data_for_row(data *dst, data *src);
 bool has_next_data_on_page(page *cur_page, char *cur_data);
 void print_data(data *dt);
+result copy_data(data *dst, data *src);
 result join_data(data *dst, data *dt1, data *dt2, const char *column_name, column_type type);

@@ -3,6 +3,7 @@
 
 #include "data.h"
 #include "database_manager.h"
+#include "functional.h"
 
 typedef struct {
     uint64_t    page;
@@ -158,6 +159,18 @@ result set_data(data *dt) {
     return OK;
 }
 
+result copy_data(data *dst, data *src) {
+    for (size_t column_index = 0; column_index < src->table->header->column_amount; column_index++) {
+        column_header header = src->table->header->columns[column_index];
+        size_t offset = offset_to_column(src->table->header, header.name, header.type);
+        any_value val;
+        get_any_from_data(src, &val, offset, header.type);
+        result copy_error = data_init_any(dst, val, header.type);
+        if (copy_error) return copy_error;
+    }
+    return OK;
+}
+
 result join_data(data *dst, data *dt1, data *dt2, const char *column_name, column_type type) {
     if (dst == NULL || dt1 == NULL || dt2 == NULL || column_name == NULL) return DONT_EXIST;
     if (dst->bytes == dt1->bytes || dst->bytes == dt2->bytes || dt1->bytes == dt2->bytes) return CROSS_ON_JOIN;
@@ -169,13 +182,8 @@ result join_data(data *dst, data *dt1, data *dt2, const char *column_name, colum
         return DONT_EXIST;
     }
 
-    for (size_t column_index = 0; column_index < dt1->table->header->column_amount; column_index++) {
-        column_header header = dt1->table->header->columns[column_index];
-        size_t offset = offset_to_column(dt1->table->header, header.name, header.type);
-        any_value val;
-        get_any_from_data(dt1, &val, offset, header.type);
-        data_init_any(dst, val, header.type);
-    }
+    result copy_error = copy_data(dst, dt1);
+    if (copy_error) return copy_error;
 
     for (size_t column_index = 0; column_index < dt2->table->header->column_amount; column_index++) {
         column_header header = dt2->table->header->columns[column_index];
@@ -183,7 +191,8 @@ result join_data(data *dst, data *dt1, data *dt2, const char *column_name, colum
         size_t offset = offset_to_column(dt2->table->header, header.name, header.type);
         any_value val;
         get_any_from_data(dt2, &val, offset, header.type);
-        data_init_any(dst, val, header.type);
+        copy_error = data_init_any(dst, val, header.type);
+        if (copy_error) return copy_error;
     }
 
     return OK;

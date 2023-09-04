@@ -214,3 +214,46 @@ iterator1_release:
     
     return new_tb;
 }
+
+maybe_table filter_table(table*tb, column_type type, const char *column_name, closure clr) {
+    maybe_table new_tb;
+    maybe_data_iterator iterator = init_iterator(tb);
+    if (iterator.error) {
+        new_tb = (maybe_table) { .error=iterator.error, .value=NULL };
+        goto iterator_release;
+    }
+
+    new_tb = create_table("filtered table");
+    if (new_tb.error)
+        goto iterator_release;
+
+    copy_columns(new_tb.value, tb);
+
+    maybe_data filtered_data = init_data(new_tb.value);
+    if (filtered_data.error) {
+        release_table(new_tb.value);
+        new_tb = (maybe_table) { .error=filtered_data.error, .value=NULL };
+        goto filtered_data_release;
+    }
+
+    size_t offset_to_column1 = offset_to_column(tb->header, column_name, type);
+
+    while (seek_next_where(iterator.value, type, column_name, clr)) {
+        result copy_error = copy_data(filtered_data.value, iterator.value->cur_data);
+        if (copy_error) {
+            release_table(new_tb.value);
+            new_tb = (maybe_table) { .error=filtered_data.error, .value=NULL };
+            break;
+        }
+        set_data(filtered_data.value);
+        clear_data(filtered_data.value);
+        get_next(iterator.value);
+    }
+
+filtered_data_release:
+    release_data(filtered_data.value);
+iterator_release:
+    release_iterator(iterator.value);
+    
+    return new_tb;
+}

@@ -79,6 +79,13 @@ size_t offset_to_column(table_header *tb_header, const char *column_name, column
     return -1;
 }
 
+void copy_columns(table *dst, table *src) {
+    for (size_t column_index = 0; column_index < src->header->column_amount; column_index++) {
+        column_header header = src->header->columns[column_index];
+        add_column(dst, header.name, header.type);
+    }
+}
+
 result join_columns(table *dst, table *tb1, table *tb2, const char *column_name, column_type type) {
     bool found_in_common = false;
     for (size_t column_index = 0; column_index < tb1->header->column_amount; column_index++) {
