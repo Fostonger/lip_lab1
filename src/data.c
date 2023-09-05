@@ -214,7 +214,7 @@ bool has_next_data_on_page(page *cur_page, char *cur_data) {
             && ( cur_data - (char *)cur_page->data ) / cur_page->tbheader->row_size < cur_page->pgheader->rows_count;
 }
 
-void correct_string_references_on_page(table *tb, page *pg_with_string_data, char *cur_data, size_t bytes_moved, size_t string_offset ) {
+void correct_string_references_on_page(table *tb, page *pg_with_string_data, char *cur_data, size_t bytes_moved, size_t new_page_num, size_t string_offset ) {
     string_in_table_data *cur_string_ref = (string_in_table_data *) (cur_data + string_offset);
     if (cur_string_ref->string_page_number != pg_with_string_data->pgheader->page_number) return;
 
@@ -230,6 +230,7 @@ void correct_string_references_on_page(table *tb, page *pg_with_string_data, cha
         cur_string_ref = (string_in_table_data *) ((char *)pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
 
         cur_string_ref->offset -= bytes_moved;
+        cur_string_ref->string_page_number = new_page_num;
 
         cur_string_data = get_next_string_data_on_page(cur_string_data, pg_with_string_data);
     }
@@ -252,7 +253,8 @@ result delete_strings_from_row(data *dt) {
         if (page_with_string.error) return page_with_string.error;
         size_t bytes_moved = delete_saved_string(page_with_string.value, string_data->offset);
         page_with_string.value->pgheader->data_offset -= bytes_moved;
-        correct_string_references_on_page(dt->table, page_with_string.value, dt->bytes, bytes_moved, string_offset);
+        correct_string_references_on_page(dt->table, page_with_string.value, dt->bytes, bytes_moved,
+            page_with_string.value->pgheader->page_number, string_offset);
     }
     return OK;
 }

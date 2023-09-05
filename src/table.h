@@ -38,6 +38,7 @@ struct table {
     page *first_page_to_write;
     page *first_string_page_to_write;
     table_header* header;
+    database *db;
 };
 
 OPTIONAL(table)
@@ -46,7 +47,7 @@ table *unwrap_table( maybe_table optional );
 
 uint8_t type_to_size(column_type type);
 maybe_table read_table(const char *tablename, database *db);
-maybe_table create_table(const char *tablename);
+maybe_table create_table(const char *tablename, database *db);
 size_t offset_to_column(table_header *tb, const char *column_name, column_type type);
 void release_table(table *tb);
 result add_column(table *tb, const char *column_name, column_type type);

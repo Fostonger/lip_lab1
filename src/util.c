@@ -8,7 +8,10 @@ static const char *const result_descriptions[] = {
     [MALLOC_ERROR] = "ERROR: Couldn't allocate memory!",
     [NOT_ENOUGH_SPACE] = "ERROR: Row in table is not big enough to hold the value!",
     [DONT_EXIST] = "ERROR: The element you searching for does not exist",
-    [CROSS_ON_JOIN] = "ERROR: You trying to join same table, that's inappropriate"
+    [CROSS_ON_JOIN] = "ERROR: You trying to join same table, that's inappropriate",
+    [WRITE_ERROR] = "ERROR: Error occured while trying to write to database file",
+    [READ_ERROR] = "ERROR: Error occured while trying to read database file",
+    [DIFFERENT_DB] = "ERROR: the action you trying to perform meant to be inside single database, not with several of them!"
 };
 
 int8_t print_if_failure( result result ) {

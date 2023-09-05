@@ -6,7 +6,10 @@ typedef enum {
     MALLOC_ERROR,
     NOT_ENOUGH_SPACE,
     DONT_EXIST,
-    CROSS_ON_JOIN
+    CROSS_ON_JOIN,
+    WRITE_ERROR,
+    READ_ERROR,
+    DIFFERENT_DB
 } result;
 
 #define OPTIONAL(STRUCT_NAME)       \

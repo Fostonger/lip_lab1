@@ -149,6 +149,7 @@ closure join_func(any_value value, column_type type) {
 }
 
 maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_type type, char *new_table_name) {
+    if (tb1->db != tb2->db) return (maybe_table) { .error=DIFFERENT_DB, .value=NULL };
     maybe_table new_tb;
     maybe_data_iterator iterator1 = init_iterator(tb1);
     if (iterator1.error) {
@@ -161,7 +162,7 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
         goto iterator2_release;
     }
 
-    new_tb = create_table(new_table_name);
+    new_tb = create_table(new_table_name, tb1->db);
     if (new_tb.error)
         goto iterator2_release;
 
@@ -223,7 +224,7 @@ maybe_table filter_table(table*tb, column_type type, const char *column_name, cl
         goto iterator_release;
     }
 
-    new_tb = create_table("filtered table");
+    new_tb = create_table("filtered table", tb->db);
     if (new_tb.error)
         goto iterator_release;
 

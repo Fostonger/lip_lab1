@@ -25,7 +25,7 @@ table *unwrap_table( maybe_table optional ) {
     return NULL;
 }
 
-maybe_table create_table(const char *tablename) {
+maybe_table create_table(const char *tablename, database *db) {
     table_header *header = malloc(sizeof(table_header));
     if (header == NULL) return (maybe_table) { .error=MALLOC_ERROR };
 
@@ -37,6 +37,7 @@ maybe_table create_table(const char *tablename) {
     if (tb == NULL) return (maybe_table) { .error=MALLOC_ERROR };
 
     tb->header = header;
+    tb->db = db;
     return (maybe_table) { .error=OK, .value=tb };
 }
 

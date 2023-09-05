@@ -17,6 +17,7 @@ typedef struct database database;
 struct database_header {
     uint16_t page_size;
     uint16_t first_free_page;
+    uint16_t last_page_in_file_number;
 };
 
 struct page_header {
@@ -38,17 +39,18 @@ struct database {
     FILE *file;
     database_header *header;
     page *first_loaded_page;
+    page **all_loaded_pages;
+    size_t loaded_pages_count;
+    size_t loaded_pages_capacity;
 };
 
 OPTIONAL(database)
 OPTIONAL(page)
 
-maybe_database initdb(FILE *file);
-maybe_database read_db(FILE *file);
-result write_db_header(database_header header, FILE *file);
-void close_db(database *db);
+maybe_database initdb(FILE *file, bool overwrite);
+void release_db(database *db);
 
-maybe_page create_page(table_header *tb_header);
+maybe_page create_page(table *tb);
 maybe_page read_page(database *db, uint16_t page_ordinal);
 maybe_page get_page_by_number(page *first_page, uint64_t page_ordinal);
 maybe_page get_suitable_page(table *tb, size_t data_size);

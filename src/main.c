@@ -1,6 +1,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <errno.h>
+#include <limits.h>
+#include <unistd.h>
+
 #include "table.h"
 #include "database_manager.h"
 #include "util.h"
@@ -145,11 +149,16 @@ int work_with_second_table(table *t2) {
 }
 
 int main(void) {
-    // char *filename = "database.fost.data";
-    // FILE *dbfile = fopen(filename, "r+");
-    // database db = unwrap_database(initdb(dbfile));
-    table *t1 = unwrap_table( create_table("table1") );
-    table *t2 = unwrap_table( create_table("table2") );
+    char *filename = "database.fost.data";
+    FILE *dbfile = fopen(filename, "r+");
+
+    maybe_database db = initdb(dbfile, true);
+    if (db.error) {
+        print_if_failure(db.error);
+        return 1;
+    }
+    table *t1 = unwrap_table( create_table("table1", db.value) );
+    table *t2 = unwrap_table( create_table("table2", db.value) );
     add_column(t1, "ints", INT_32);
     add_column(t1, "bools", BOOL);
     add_column(t1, "floats", FLOAT);
