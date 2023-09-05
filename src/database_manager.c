@@ -10,9 +10,9 @@ result write_db_header(database *db) {
     return OK;
 }
 
-result read_db_header(FILE* file, database_header* header) {
-    fseek(file, 0, SEEK_SET);
-    size_t read = fread(header, sizeof(database_header), 1, file);
+result read_db_header(database *db, database_header* header) {
+    fseek(db->file, 0, SEEK_SET);
+    size_t read = fread(header, sizeof(database_header), 1, db->file);
     if (read != 1) return READ_ERROR;
     return OK;
 }
@@ -33,13 +33,12 @@ maybe_database allocate_db(FILE *file) {
     }
 
     header->page_size = PAGE_SIZE;
-    header->first_free_page = 1;
-    header->last_page_in_file_number = 1;
+    header->first_free_page = 0;
+    header->next_page_to_save_number = 0;
     db_val->header = header;
 
     db_val->all_loaded_pages = (page **)malloc(sizeof(page *) * 100);
     db_val->loaded_pages_capacity = 100;
-    db_val->loaded_pages_count = 0;
     return db;
 }
 
@@ -59,7 +58,7 @@ maybe_database read_db(FILE *file) {
     maybe_database db = allocate_db(file);
     if (db.error) return db;
     
-    result read_error = read_db_header(file, db.value->header);
+    result read_error = read_db_header(db.value, db.value->header);
     if (read_error) {
         release_db(db.value);
         return (maybe_database){ .error=read_error, .value=NULL };
@@ -81,15 +80,79 @@ uint16_t get_page_number(database *db, page *pg) {
         free(db->all_loaded_pages);
         db->all_loaded_pages = new_pages_storage;
     }
-    db->all_loaded_pages[db->loaded_pages_count] = pg;
+    db->all_loaded_pages[db->loaded_pages_count++] = pg;
     return page_num;
 }
 
-result write_page(database *db, page *pg) {
-
+size_t count_offset_to_page_header(database *db, size_t ordinal_number) {
+    return sizeof(database_header) + (sizeof(page_header) + db->header->page_size) * ordinal_number;
 }
 
-maybe_page create_page(table *tb) {
+size_t count_offset_to_page_data(database *db, size_t ordinal_number) {
+    return count_offset_to_page_header(db, ordinal_number) + sizeof(page_header);
+}
+
+result write_page_header(page *pg) {
+    size_t page_offset = count_offset_to_page_header(pg->tb->db, pg->pgheader->page_number);
+    fseek(pg->tb->db->file, page_offset, SEEK_SET);
+    size_t written = fwrite(pg->pgheader, sizeof(page_header), 1, pg->tb->db->file);
+    if (written != 1) return WRITE_ERROR;
+    return OK;
+}
+
+result write_page_data(page *pg) {
+    size_t page_offset = count_offset_to_page_data(pg->tb->db, pg->pgheader->page_number);
+    fseek(pg->tb->db->file, page_offset, SEEK_SET);
+    size_t written = fwrite(pg->data, pg->tb->db->header->page_size, 1, pg->tb->db->file);
+    if (written != 1) return WRITE_ERROR;
+
+    pg->tb->db->header->next_page_to_save_number++;
+    write_db_header(pg->tb->db);
+    
+    return OK;
+}
+
+page *rearrange_page_order(page *pg) {
+    database *db = pg->tb->db;
+    page *pg_to_move = db->all_loaded_pages[db->header->next_page_to_save_number];
+
+    bool move_second_page = pg_to_move != NULL && pg_to_move->pgheader != NULL;
+
+    size_t moved_page_number = pg->pgheader->page_number;
+    size_t target_page_number = db->header->next_page_to_save_number;
+
+    if (move_second_page) pg_to_move->pgheader->page_number = moved_page_number;
+    pg->pgheader->page_number = target_page_number;
+
+    for (size_t pages_index = 0; pages_index < moved_page_number; pages_index++) {
+        maybe_page pg_header_on_disk = read_page_header(pg->tb->db, pg->tb, pages_index);
+        if(pg_header_on_disk.error) continue;
+        if(pg_header_on_disk.value->pgheader->next_page_number == moved_page_number) {
+            pg_header_on_disk.value->pgheader->next_page_number = target_page_number;
+            write_page_header(pg_header_on_disk.value);
+        } else if (pg_header_on_disk.value->pgheader->next_page_number == target_page_number) {
+            pg_header_on_disk.value->pgheader->next_page_number = moved_page_number;
+            write_page_header(pg_header_on_disk.value);
+        }
+    }
+    db->all_loaded_pages[moved_page_number] = pg_to_move;
+    db->all_loaded_pages[target_page_number] = pg;
+
+    return move_second_page ? pg_to_move : NULL;
+}
+
+result write_page(page *pg) {
+    if (pg->tb->db->header->next_page_to_save_number < pg->pgheader->page_number) {
+        return INVALID_PAGE_NUMBER;
+    }
+    result write_error = write_page_header(pg);
+    if (write_error) return write_error;
+    write_error = write_page_data(pg);
+    if (write_error) return write_error;
+    return OK;
+}
+
+maybe_page create_page(table *tb, page_type type) {
     page_header *header = malloc(sizeof(page_header));
     if (header == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
 
@@ -97,6 +160,7 @@ maybe_page create_page(table *tb) {
     header->table_header = *tb->header;
     header->rows_count = 0;
     header->next_page_number = -1;
+    header->type = type;
 
     page *pg = malloc(sizeof(page));
     if (pg == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
@@ -104,11 +168,28 @@ maybe_page create_page(table *tb) {
     header->page_number = get_page_number(tb->db, pg);
 
     pg->pgheader = header;
-    pg->tbheader = tb->header;
+    pg->tb = tb;
     pg->data = malloc (PAGE_SIZE);
     if (pg->data == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
 
     return (maybe_page) { .error=OK, .value=pg };
+}
+
+maybe_page create_empty_page_with_header(page_header *header, table *tb) {
+    page *pg = malloc(sizeof(page));
+    if (pg == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
+    pg->pgheader = header;
+    pg->tb = tb;
+    return (maybe_page) { .error=OK, .value=pg };
+}
+
+maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal) {
+    size_t page_offset = count_offset_to_page_header(db, page_ordinal);
+    fseek(db->file, page_offset, SEEK_SET);
+    page_header *header = (page_header *) malloc(sizeof(page_header));
+    size_t read = fread(header, sizeof(page_header), 1, db->file);
+    if (read != 1) return (maybe_page){.error=READ_ERROR, .value=NULL };
+    return create_empty_page_with_header(header, tb);
 }
 
 page *get_first_writable_page(page *pg) {
@@ -119,9 +200,9 @@ page *get_first_writable_page(page *pg) {
 }
 
 // Перебираем все страницы с доступным местом пока не найдем ту, в которую можем пихнуть строку
-maybe_page get_suitable_page(table *tb, size_t data_size) {
+maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
     maybe_page pg = (maybe_page) {};
-    if (tb->first_string_page_to_write == NULL && ( pg = create_page(tb) ).error )
+    if (tb->first_string_page_to_write == NULL && ( pg = create_page(tb, type) ).error )
         return (maybe_page) { .error=pg.error, .value=NULL };
     if (pg.value != NULL) {
         tb->first_string_page_to_write = pg.value;
@@ -138,7 +219,7 @@ maybe_page get_suitable_page(table *tb, size_t data_size) {
     // проверку на MIN_VALUABLE_SIZE все равно сделать нужно
     if (writable_page->pgheader->data_offset + data_size > PAGE_SIZE) {
         maybe_page new_pg;
-        if ( !( new_pg = create_page(tb) ).error )
+        if ( !( new_pg = create_page(tb, type) ).error )
             return (maybe_page) { .error=new_pg.error, .value=NULL };
         writable_page = new_pg.value;
 
@@ -160,16 +241,16 @@ maybe_page get_next_page_or_load(page *pg) {
     return (maybe_page) { .error=DONT_EXIST, .value=NULL };
 }
 
-maybe_page get_page_by_number(page *first_page, uint64_t page_ordinal) {
-    maybe_page pg = (maybe_page) { .error=OK, .value=first_page };
-    while ( pg.value->pgheader->page_number < page_ordinal && !(pg = get_next_page_or_load(pg.value)).error );
-    if (!pg.error && pg.value->pgheader->page_number == page_ordinal) return pg;
-    return (maybe_page) { .error=DONT_EXIST, .value=NULL };
+maybe_page get_page_by_number(database *db, uint64_t page_ordinal) {
+    if (page_ordinal > db->loaded_pages_count || db->all_loaded_pages[page_ordinal]->pgheader == NULL ) // доделать
+        return (maybe_page) { .error=DONT_EXIST, .value=NULL };
+    maybe_page pg = (maybe_page) { .error=OK, .value=db->all_loaded_pages[page_ordinal] };
+    return pg;
 }
 
-result ensure_enough_space_table(table *tb, size_t data_size) {
+result ensure_enough_space_table(table *tb, size_t data_size, page_type type) {
     maybe_page pg = (maybe_page) {};
-    if (tb->first_page_to_write == NULL && ( pg = create_page(tb) ).error )
+    if (tb->first_page_to_write == NULL && ( pg = create_page(tb, type) ).error )
         return pg.error;
     if (pg.value != NULL) {
         tb->first_page_to_write = pg.value;
@@ -181,7 +262,7 @@ result ensure_enough_space_table(table *tb, size_t data_size) {
 
     if (writable_page_header->data_offset + data_size > PAGE_SIZE) {
         maybe_page new_pg;
-        if ( !( new_pg = create_page(tb) ).error )
+        if ( !( new_pg = create_page(tb, type) ).error )
             return new_pg.error;
         if (new_pg.value != NULL) {
             tb->first_page_to_write->next_page = new_pg.value;

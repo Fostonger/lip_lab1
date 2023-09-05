@@ -43,8 +43,6 @@ struct table {
 
 OPTIONAL(table)
 
-table *unwrap_table( maybe_table optional );
-
 uint8_t type_to_size(column_type type);
 maybe_table read_table(const char *tablename, database *db);
 maybe_table create_table(const char *tablename, database *db);

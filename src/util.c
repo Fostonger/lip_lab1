@@ -11,7 +11,8 @@ static const char *const result_descriptions[] = {
     [CROSS_ON_JOIN] = "ERROR: You trying to join same table, that's inappropriate",
     [WRITE_ERROR] = "ERROR: Error occured while trying to write to database file",
     [READ_ERROR] = "ERROR: Error occured while trying to read database file",
-    [DIFFERENT_DB] = "ERROR: the action you trying to perform meant to be inside single database, not with several of them!"
+    [DIFFERENT_DB] = "ERROR: the action you trying to perform meant to be inside single database, not with several of them!",
+    [INVALID_PAGE_NUMBER] = "ERROR: Before you move page, its number has to be first to write. Rearrange pages"
 };
 
 int8_t print_if_failure( result result ) {

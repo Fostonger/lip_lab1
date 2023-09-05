@@ -58,7 +58,7 @@ result data_init_string(data *dt, const char* val) {
     size_t string_len = strlen(val);
     size_t string_data_len = sizeof(string_in_storage) + string_len + 1;
 
-    maybe_page suitable_page = get_suitable_page(dt->table, string_data_len);
+    maybe_page suitable_page = get_suitable_page(dt->table, string_data_len, STRING_PAGE);
     if (suitable_page.error) return suitable_page.error;
 
     page *writable_page = suitable_page.value;
@@ -111,7 +111,6 @@ result data_init_any(data *dt, const any_value val, column_type type) {
 
 string_in_storage *get_next_string_data_on_page(string_in_storage *prev_string, page *pg_with_string_data) {
     if (!prev_string || !pg_with_string_data) return NULL;
-    if (prev_string->page != pg_with_string_data->pgheader->page_number) return NULL;
 
     string_in_storage *next_string = (string_in_storage *)((char *)prev_string + sizeof(string_in_storage) + prev_string->str_len + 1);
     // Проверка, не является ли prev_string последней строкой на странице
@@ -119,7 +118,7 @@ string_in_storage *get_next_string_data_on_page(string_in_storage *prev_string, 
     return (string_in_storage *)next_string;
 }
 
-void set_page_info_in_strings(data *dt, page *pg_with_string_ref, uint64_t offset_to_row) {
+void set_page_info_in_strings(data *dt, size_t string_pg_num, uint64_t offset_to_row) {
     page *pg_with_string_data = dt->table->first_string_page;
     for (size_t column_index = 0; column_index < dt->table->header->column_amount; column_index++) {
         column_header header = dt->table->header->columns[column_index];
@@ -129,19 +128,19 @@ void set_page_info_in_strings(data *dt, page *pg_with_string_ref, uint64_t offse
         string_in_table_data *string_ref = (string_in_table_data *)((char *)dt->bytes + string_offset);
 
         if (pg_with_string_data->pgheader->page_number < string_ref->string_page_number) {
-            maybe_page page_with_string = get_page_by_number(dt->table->first_string_page, string_ref->string_page_number);
+            maybe_page page_with_string = get_page_by_number(dt->table->db, string_ref->string_page_number);
             if (page_with_string.error) return;
             pg_with_string_data = page_with_string.value;
         }
 
         string_in_storage *string_in_storage_ptr = (string_in_storage *)((char *)pg_with_string_data->data + string_ref->offset);
-        string_in_storage_ptr->page = pg_with_string_ref->pgheader->page_number;
+        string_in_storage_ptr->page = string_pg_num;
         string_in_storage_ptr->offset_to_ref = offset_to_row + string_offset;
     }
 }
 
 result set_data(data *dt) {
-    result is_enough_space = ensure_enough_space_table(dt->table, dt->size);
+    result is_enough_space = ensure_enough_space_table(dt->table, dt->size, TABLE_DATA);
     if (is_enough_space) return is_enough_space;
 
     char *data_ptr = dt->bytes;
@@ -149,12 +148,13 @@ result set_data(data *dt) {
     page *pg_to_write = dt->table->first_page_to_write;
     uint64_t offset_to_row = pg_to_write->pgheader->rows_count * dt->table->header->row_size;
 
-    set_page_info_in_strings(dt, pg_to_write, offset_to_row);
+    set_page_info_in_strings(dt, pg_to_write->pgheader->page_number, offset_to_row);
 
     void **table_ptr = pg_to_write->data + offset_to_row;
     memcpy(table_ptr, data_ptr, dt->size);
 
     dt->table->first_page_to_write->pgheader->rows_count += 1;
+    dt->table->first_page_to_write->pgheader->data_offset += dt->size;
 
     return OK;
 }
@@ -211,19 +211,18 @@ size_t delete_saved_string(page *page_string, uint16_t offset) {
 
 bool has_next_data_on_page(page *cur_page, char *cur_data) {
     return cur_data - (char *)cur_page->data < PAGE_SIZE 
-            && ( cur_data - (char *)cur_page->data ) / cur_page->tbheader->row_size < cur_page->pgheader->rows_count;
+            && ( cur_data - (char *)cur_page->data ) / cur_page->tb->header->row_size <= cur_page->pgheader->rows_count;
 }
 
 void correct_string_references_on_page(table *tb, page *pg_with_string_data, char *cur_data, size_t bytes_moved, size_t new_page_num, size_t string_offset ) {
     string_in_table_data *cur_string_ref = (string_in_table_data *) (cur_data + string_offset);
-    if (cur_string_ref->string_page_number != pg_with_string_data->pgheader->page_number) return;
 
-    string_in_storage *cur_string_data = (string_in_storage *)pg_with_string_data->data + cur_string_ref->offset;
-    maybe_page pg_with_string_ref = get_page_by_number(tb->first_page, cur_string_data->page);
+    string_in_storage *cur_string_data = (string_in_storage *)(pg_with_string_data->data + cur_string_ref->offset);
+    maybe_page pg_with_string_ref = get_page_by_number(tb->db, cur_string_data->page);
     if (pg_with_string_ref.error) return;
     while(cur_string_data != NULL) {
         if (cur_string_data->page != pg_with_string_ref.value->pgheader->page_number) {
-            pg_with_string_ref = get_page_by_number(tb->first_string_page, cur_string_data->page);
+            pg_with_string_ref = get_page_by_number(tb->db, cur_string_data->page);
             if (pg_with_string_ref.error) return;
         }
 
@@ -249,7 +248,7 @@ result delete_strings_from_row(data *dt) {
         size_t string_offset = offset_to_column(dt->table->header, header.name, STRING);
         string_in_table_data *string_data = (string_in_table_data *)((char *)dt->bytes + string_offset);
 
-        maybe_page page_with_string = get_page_by_number(dt->table->first_string_page, string_data->string_page_number);
+        maybe_page page_with_string = get_page_by_number(dt->table->db, string_data->string_page_number);
         if (page_with_string.error) return page_with_string.error;
         size_t bytes_moved = delete_saved_string(page_with_string.value, string_data->offset);
         page_with_string.value->pgheader->data_offset -= bytes_moved;
@@ -263,6 +262,7 @@ result delete_saved_row(data *dt) {
     // result delete_string_result = delete_strings_from_row(dt);
     // if (delete_string_result) return delete_string_result;
     dt->table->first_page_to_write->pgheader->rows_count -= 1;
+    dt->table->first_page_to_write->pgheader->data_offset -= dt->size;
 
     void *data_ptr = dt->bytes;
     void *table_ptr = dt->table->first_page_to_write->data
@@ -277,6 +277,63 @@ void update_string_data_for_row(data *dst, data *src) {
     set_data(src);
 }
 
+void prepare_string_data_for_saving(page *pg) {
+    string_in_storage *cur_string_data = (string_in_storage *)(pg->data);
+    maybe_page pg_with_string_ref = get_page_by_number(pg->tb->db, cur_string_data->page);
+    if (pg_with_string_ref.error) return;
+
+    string_in_table_data *cur_string_ref = (string_in_table_data *) (pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
+    while(cur_string_data != NULL) {
+        if (cur_string_data->page != pg_with_string_ref.value->pgheader->page_number) {
+            pg_with_string_ref = get_page_by_number(pg->tb->db, cur_string_data->page);
+            if (pg_with_string_ref.error) return;
+        }
+
+        cur_string_ref = (string_in_table_data *) ((char *)pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
+
+        cur_string_ref->string_page_number = pg->pgheader->page_number;
+
+        cur_string_data = get_next_string_data_on_page(cur_string_data, pg);
+    }
+}
+
+void prepare_table_data_for_saving(page *pg) {
+    maybe_data dt = init_data(pg->tb);
+    if (dt.error) return;
+    free(dt.value->bytes);
+    dt.value->bytes = pg->data;
+    size_t offset_to_row = 0;
+    while(has_next_data_on_page(pg, dt.value->bytes)) {
+        for (size_t column_index = 0; column_index < pg->tb->header->column_amount; column_index++) {
+            column_header header = pg->tb->header->columns[column_index];
+            if (header.type != STRING) continue;
+
+            size_t string_offset = offset_to_column(pg->tb->header, header.name, STRING);
+            string_in_table_data *string_ref = (string_in_table_data *)((char *)dt.value->bytes + string_offset);
+
+            maybe_page page_with_string = get_page_by_number(pg->tb->db, string_ref->string_page_number);
+            if (page_with_string.error) return ;
+            string_in_storage *string_data = (string_in_storage *)(page_with_string.value->data + string_ref->offset);
+            string_data->page = pg->pgheader->page_number;
+        }
+        offset_to_row += dt.value->table->header->row_size;
+        dt.value->bytes += dt.value->table->header->row_size;
+    }
+}
+
+void prepare_data_for_saving(page *pg) {
+    switch (pg->pgheader->type) {
+    case STRING_PAGE:
+        prepare_string_data_for_saving(pg);
+        break;
+    case TABLE_DATA:
+        prepare_table_data_for_saving(pg);
+        break;
+    default:
+        break;
+    }
+}
+
 void get_integer_from_data(data *dt, int32_t *dest, size_t offset) {
     *dest = *((int32_t *) ((char *)dt->bytes + offset));
 }
@@ -284,7 +341,7 @@ void get_integer_from_data(data *dt, int32_t *dest, size_t offset) {
 void get_string_from_data(data *dt, char **dest, size_t data_offset) {
     string_in_table_data *string_data_ptr = (string_in_table_data *)((char *)dt->bytes + data_offset);
     string_in_table_data *string_in_table = string_data_ptr;
-    maybe_page page_with_string = get_page_by_number(dt->table->first_string_page, string_in_table->string_page_number);
+    maybe_page page_with_string = get_page_by_number(dt->table->db, string_in_table->string_page_number);
     if (page_with_string.error) return;
     string_in_storage *target_string = (string_in_storage *)((char *)page_with_string.value->data + string_in_table->offset);
     *dest = target_string->string;

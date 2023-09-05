@@ -9,7 +9,8 @@ typedef enum {
     CROSS_ON_JOIN,
     WRITE_ERROR,
     READ_ERROR,
-    DIFFERENT_DB
+    DIFFERENT_DB,
+    INVALID_PAGE_NUMBER
 } result;
 
 #define OPTIONAL(STRUCT_NAME)       \

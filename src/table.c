@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "table.h"
+#include "data.h"
 
 uint8_t type_to_size(column_type type) {
     switch (type) {
@@ -18,13 +19,6 @@ uint8_t type_to_size(column_type type) {
     }
 }
 
-table *unwrap_table( maybe_table optional ) {
-    if (!optional.error)
-        return optional.value;
-    print_if_failure(optional.error);
-    return NULL;
-}
-
 maybe_table create_table(const char *tablename, database *db) {
     table_header *header = malloc(sizeof(table_header));
     if (header == NULL) return (maybe_table) { .error=MALLOC_ERROR };
@@ -39,6 +33,41 @@ maybe_table create_table(const char *tablename, database *db) {
     tb->header = header;
     tb->db = db;
     return (maybe_table) { .error=OK, .value=tb };
+}
+
+result save_table(database *db, table *tb) {
+    page *page_to_save = tb->first_page;
+    while (page_to_save != NULL) {
+        if (page_to_save->pgheader->page_number > db->header->next_page_to_save_number) {
+            page *moved_page = rearrange_page_order(page_to_save);
+            if (moved_page != NULL)
+                prepare_data_for_saving(moved_page);
+            prepare_data_for_saving(page_to_save);
+        }
+        result write_error = write_page(page_to_save);
+        if (write_error) return write_error;
+        page_to_save = page_to_save->next_page;
+    }
+    page_to_save = tb->first_string_page;
+    while (page_to_save != NULL) {
+        if (page_to_save->pgheader->page_number > db->header->next_page_to_save_number) {
+            page *moved_page = rearrange_page_order(page_to_save);
+            if (moved_page != NULL)
+                prepare_data_for_saving(moved_page);
+            prepare_data_for_saving(page_to_save);
+        }
+        result write_error = write_page(page_to_save);
+        if (write_error) return write_error;
+        page_to_save = page_to_save->next_page;
+    }
+    
+    page_to_save = tb->first_page;
+    while (page_to_save != NULL) {
+        result write_error = write_page(page_to_save);
+        if (write_error) return write_error;
+        page_to_save = page_to_save->next_page;
+    }
+    return OK;
 }
 
 void release_table(table *tb) {

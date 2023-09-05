@@ -157,8 +157,8 @@ int main(void) {
         print_if_failure(db.error);
         return 1;
     }
-    table *t1 = unwrap_table( create_table("table1", db.value) );
-    table *t2 = unwrap_table( create_table("table2", db.value) );
+    table *t1 = create_table("table1", db.value).value;
+    table *t2 = create_table("table2", db.value).value;
     add_column(t1, "ints", INT_32);
     add_column(t1, "bools", BOOL);
     add_column(t1, "floats", FLOAT);
@@ -257,7 +257,7 @@ int main(void) {
     closure update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string" } };
     printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
 
-    release_data(data1.value);
+    clear_data(data1.value);
     print_table(t1);
 
     printf("second table returned %d\n", work_with_second_table(t2));
@@ -266,5 +266,26 @@ int main(void) {
     if ( !print_if_failure(joined_tb.error) ) return 1;
     print_table(joined_tb.value);
 
+    print_if_failure(save_table(db.value, joined_tb.value));
+
+    if  (   !print_if_failure( data_init_integer(data1.value, 300) ) 
+        ||  !print_if_failure( data_init_boolean(data1.value, 0) )
+        ||  !print_if_failure( data_init_float(data1.value, 15.68) )
+        ||  !print_if_failure( data_init_string(data1.value, "zinger string") ) ) {
+
+            release_table(t1);
+            release_data(data1.value);
+            return 1;
+    }
+
+    update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string updated" } };
+    printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
+    
+    release_data(data1.value);
+    
+    print_table(t1);
+
     release_table(t1);
+
+    fclose(dbfile);
 }
