@@ -9,6 +9,7 @@ typedef struct {
     uint64_t    page;
     uint64_t    offset_to_ref;
     uint64_t    str_len;
+    bool        enabled;
     char        string[];
 } string_in_storage;
 
@@ -70,6 +71,7 @@ result data_init_string(data *dt, const char* val) {
 
     string_in_storage *string_data_ptr = (string_in_storage *)((char *)writable_page->data + writable_page->pgheader->data_offset);
     string_data_ptr->str_len = string_len;
+    string_data_ptr->enabled = true;
 
     char *data = string_data_ptr->string;
     strcpy(data, val);
@@ -209,12 +211,17 @@ size_t delete_saved_string(page *page_string, uint16_t offset) {
     return (char *)next_strings - (char *)string_to_delete;
 }
 
-bool has_next_data_on_page(page *cur_page, char *cur_data) {
-    return cur_data - (char *)cur_page->data < PAGE_SIZE 
-            && ( cur_data - (char *)cur_page->data ) / cur_page->tb->header->row_size <= cur_page->pgheader->rows_count;
+void make_string_disabled(page *page_string, uint16_t offset) {
+    string_in_storage *string_to_delete = (string_in_storage *)((char *)page_string->data + offset);
+    string_to_delete->enabled = false;
 }
 
-void correct_string_references_on_page(table *tb, page *pg_with_string_data, char *cur_data, size_t bytes_moved, size_t new_page_num, size_t string_offset ) {
+bool has_next_data_on_page(page *cur_page, char *cur_data) {
+    return cur_data - (char *)cur_page->data < PAGE_SIZE 
+            && ( cur_data - (char *)cur_page->data ) / cur_page->tb->header->row_size < cur_page->pgheader->rows_count;
+}
+
+void correct_string_references_on_page(table *tb, page *pg_with_string_data, char *cur_data, size_t bytes_moved, size_t new_page_num, size_t string_offset, bool whole_pg ) {
     string_in_table_data *cur_string_ref = (string_in_table_data *) (cur_data + string_offset);
 
     string_in_storage *cur_string_data = (string_in_storage *)(pg_with_string_data->data + cur_string_ref->offset);
@@ -232,6 +239,8 @@ void correct_string_references_on_page(table *tb, page *pg_with_string_data, cha
         cur_string_ref->string_page_number = new_page_num;
 
         cur_string_data = get_next_string_data_on_page(cur_string_data, pg_with_string_data);
+
+        if (!whole_pg) break;
     }
 
     if (PAGE_SIZE - pg_with_string_data->pgheader->data_offset < MIN_VALUABLE_SIZE 
@@ -250,17 +259,29 @@ result delete_strings_from_row(data *dt) {
 
         maybe_page page_with_string = get_page_by_number(dt->table->db, string_data->string_page_number);
         if (page_with_string.error) return page_with_string.error;
-        size_t bytes_moved = delete_saved_string(page_with_string.value, string_data->offset);
-        page_with_string.value->pgheader->data_offset -= bytes_moved;
-        correct_string_references_on_page(dt->table, page_with_string.value, dt->bytes, bytes_moved,
-            page_with_string.value->pgheader->page_number, string_offset);
+        make_string_disabled(page_with_string.value, string_data->offset);
     }
     return OK;
 }
 
+void sync_storage_by_table(data *dt, size_t bytes_moved) {
+    for (size_t column_index = 0; column_index < dt->table->header->column_amount; column_index++) {
+        column_header header = dt->table->header->columns[column_index];
+        if (header.type != STRING) continue;
+        
+        size_t string_offset = offset_to_column(dt->table->header, header.name, STRING);
+        string_in_table_data *string_ref = (string_in_table_data *)((char *)dt->bytes + string_offset);
+
+        maybe_page page_with_string = get_page_by_number(dt->table->db, string_ref->string_page_number);
+        string_in_storage *cur_string_data = (string_in_storage *)(page_with_string.value->data + string_ref->offset);
+
+        cur_string_data->offset_to_ref -= bytes_moved;
+    }
+}
+
 result delete_saved_row(data *dt) {
-    // result delete_string_result = delete_strings_from_row(dt);
-    // if (delete_string_result) return delete_string_result;
+    result delete_string_result = delete_strings_from_row(dt);
+    if (delete_string_result) return delete_string_result;
     dt->table->first_page_to_write->pgheader->rows_count -= 1;
     dt->table->first_page_to_write->pgheader->data_offset -= dt->size;
 
@@ -268,6 +289,8 @@ result delete_saved_row(data *dt) {
     void *table_ptr = dt->table->first_page_to_write->data
                             + dt->table->first_page_to_write->pgheader->rows_count * dt->table->header->row_size;
     if (data_ptr != table_ptr) memcpy(data_ptr, table_ptr, dt->size);
+
+    sync_storage_by_table(dt, table_ptr - data_ptr);
 
     return OK;
 }
@@ -283,7 +306,18 @@ void prepare_string_data_for_saving(page *pg) {
     if (pg_with_string_ref.error) return;
 
     string_in_table_data *cur_string_ref = (string_in_table_data *) (pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
+
+    size_t bytes_moved = 0;
     while(cur_string_data != NULL) {
+        size_t bytes_moved_now = 0;
+        if (!cur_string_data->enabled) {
+            bytes_moved_now = delete_saved_string(pg, (char *)cur_string_data - (char *)pg->data);
+            bytes_moved += bytes_moved_now;
+            pg->pgheader->data_offset -= bytes_moved_now;
+            correct_string_references_on_page(pg->tb, pg, (char *)pg_with_string_ref.value->data, bytes_moved,
+                pg->pgheader->page_number, cur_string_data->offset_to_ref, true);
+            continue;
+        }
         if (cur_string_data->page != pg_with_string_ref.value->pgheader->page_number) {
             pg_with_string_ref = get_page_by_number(pg->tb->db, cur_string_data->page);
             if (pg_with_string_ref.error) return;
@@ -292,6 +326,7 @@ void prepare_string_data_for_saving(page *pg) {
         cur_string_ref = (string_in_table_data *) ((char *)pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
 
         cur_string_ref->string_page_number = pg->pgheader->page_number;
+        cur_string_ref->offset -= bytes_moved;
 
         cur_string_data = get_next_string_data_on_page(cur_string_data, pg);
     }

@@ -268,6 +268,8 @@ int main(void) {
 
     print_if_failure(save_table(db.value, joined_tb.value));
 
+    print_table(t1);
+
     if  (   !print_if_failure( data_init_integer(data1.value, 300) ) 
         ||  !print_if_failure( data_init_boolean(data1.value, 0) )
         ||  !print_if_failure( data_init_float(data1.value, 15.68) )
@@ -282,7 +284,7 @@ int main(void) {
     printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
     
     release_data(data1.value);
-    
+
     print_table(t1);
 
     release_table(t1);
