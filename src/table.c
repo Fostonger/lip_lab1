@@ -70,6 +70,25 @@ result save_table(database *db, table *tb) {
     return OK;
 }
 
+bool get_table_by_name(any_value val1, page_header *header) {
+    return !strcmp(val1.string_value, header->table_header.name);
+}
+
+maybe_table read_table(const char *tablename, database *db) {
+    database_closure predicate = (database_closure) { .func=get_table_by_name, .value1=tablename };
+    maybe_page pg_with_table = find_page(db, predicate);
+    if (pg_with_table.error) return (maybe_table) { .error= pg_with_table.error, .value=NULL };
+
+    table *tb = malloc(sizeof(table));
+    if (tb == NULL) return (maybe_table) { .error=MALLOC_ERROR };
+
+    tb->header = &(pg_with_table.value->pgheader->table_header);
+    tb->db = db;
+    tb->first_page = pg_with_table.value;
+
+    pg_with_table.value->tb = tb;
+}
+
 void release_table(table *tb) {
     release_page(tb->first_page);
     release_page(tb->first_string_page);
@@ -78,23 +97,14 @@ void release_table(table *tb) {
 }
 
 result add_column(table* tb, const char *column_name, column_type type) {
-    if (tb->first_page != NULL) return MUST_BE_EMPTY;
+    if (tb->first_page != NULL && tb->first_page->pgheader->data_offset != 0) return MUST_BE_EMPTY;
 
     tb->header->column_amount += 1;
     tb->header->row_size += type_to_size(type);
 
-    table_header *new_header = malloc( sizeof(table_header) + sizeof(column_header) * tb->header->column_amount );
-    if (new_header == NULL) return MALLOC_ERROR;
-
-    *new_header = *tb->header;
-    for (size_t i = 0; i < tb->header->column_amount-1; i++) new_header->columns[i] = tb->header->columns[i];
-
-    column_header *column = &new_header->columns[tb->header->column_amount-1];
+    column_header *column = tb->header->columns + tb->header->column_amount - 1;
     strcpy(column->name, column_name);
     column->type = type;
-
-    free(tb->header);
-    tb->header = new_header;
 
     return OK;
 }

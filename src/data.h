@@ -12,15 +12,6 @@ typedef struct {
     uint16_t size;
 } data;
 
-typedef struct {
-    union{
-        int32_t int_value;
-        float float_value;
-        bool bool_value;
-        char *string_value;
-    };
-} any_value;
-
 OPTIONAL(data)
 
 maybe_data init_data(table *tb);

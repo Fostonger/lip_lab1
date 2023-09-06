@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 
 typedef enum {
     OK = 0,
@@ -12,6 +13,15 @@ typedef enum {
     DIFFERENT_DB,
     INVALID_PAGE_NUMBER
 } result;
+
+typedef struct {
+    union{
+        int32_t int_value;
+        float float_value;
+        bool bool_value;
+        char *string_value;
+    };
+} any_value;
 
 #define OPTIONAL(STRUCT_NAME)       \
     typedef struct {                \

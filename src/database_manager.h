@@ -8,12 +8,14 @@ typedef struct page_header page_header;
 typedef struct page page;
 typedef struct database database;
 typedef enum page_type page_type;
+typedef struct database_closure database_closure;
 
-#include "table.h"
-#include "util.h"
 
 #define PAGE_SIZE 8192
 #define MIN_VALUABLE_SIZE 31
+
+#include "table.h"
+#include "util.h"
 
 struct database_header {
     uint16_t page_size;
@@ -51,14 +53,21 @@ struct database {
     size_t loaded_pages_capacity;
 };
 
+struct database_closure {
+    bool (*func)(any_value, page_header*);
+    any_value value1;
+};
+
 OPTIONAL(database)
 OPTIONAL(page)
 
 maybe_database initdb(FILE *file, bool overwrite);
 void release_db(database *db);
 
-maybe_page create_page(table *tb, page_type type);
+maybe_page create_page(database *db, table *tb, page_type type);
 maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal);
+result read_page_data(database *db, page *pg_to_read);
+maybe_page find_page(database *db, database_closure predicate);
 page *rearrange_page_order(page *pg_to_save);
 maybe_page get_page_by_number(database *db, uint64_t page_ordinal);
 maybe_page get_suitable_page(table *tb, size_t data_size, page_type type);

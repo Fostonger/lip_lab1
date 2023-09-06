@@ -71,15 +71,18 @@ maybe_database initdb(FILE *file, bool overwrite) {
     return read_db(file);
 }
 
+void expand_loaded_pages_memory(database *db) {
+    page **new_pages_storage = (page **)malloc(sizeof(page *) * (db->loaded_pages_capacity + 100));
+    db->loaded_pages_capacity += 100;
+    memcpy(new_pages_storage, db->all_loaded_pages, sizeof(page *) * db->loaded_pages_count);
+    free(db->all_loaded_pages);
+    db->all_loaded_pages = new_pages_storage;
+}
+
 uint16_t get_page_number(database *db, page *pg) {
     uint16_t page_num = db->header->first_free_page++;
-    if (db->loaded_pages_count == db->loaded_pages_capacity) {
-        page **new_pages_storage = (page **)malloc(sizeof(page *) * (db->loaded_pages_capacity + 100));
-        db->loaded_pages_capacity += 100;
-        memcpy(new_pages_storage, db->all_loaded_pages, sizeof(page *) * db->loaded_pages_count);
-        free(db->all_loaded_pages);
-        db->all_loaded_pages = new_pages_storage;
-    }
+    if (db->loaded_pages_count == db->loaded_pages_capacity)
+        expand_loaded_pages_memory(db);
     db->all_loaded_pages[db->loaded_pages_count++] = pg;
     return page_num;
 }
@@ -112,6 +115,33 @@ result write_page_data(page *pg) {
     return OK;
 }
 
+result read_page_data(database *db, page *pg_to_read) {
+    if (pg_to_read == NULL || pg_to_read->pgheader == NULL) return DONT_EXIST;
+    size_t page_offset = count_offset_to_page_data(db, pg_to_read->pgheader->page_number);
+    fseek(db->file, page_offset, SEEK_SET);
+    pg_to_read->data = malloc(db->header->page_size);
+    size_t read = fread(pg_to_read->data, sizeof(char), db->header->page_size, db->file);
+    if (read != db->header->page_size) return READ_ERROR;
+    return OK;
+}
+
+maybe_page create_empty_page_with_header(page_header *header, table *tb) {
+    page *pg = malloc(sizeof(page));
+    if (pg == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
+    pg->pgheader = header;
+    pg->tb = tb;
+    return (maybe_page) { .error=OK, .value=pg };
+}
+
+maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal) {
+    size_t page_offset = count_offset_to_page_header(db, page_ordinal);
+    fseek(db->file, page_offset, SEEK_SET);
+    page_header *header = (page_header *) malloc(sizeof(page_header));
+    size_t read = fread(header, sizeof(page_header), 1, db->file);
+    if (read != 1) return (maybe_page){.error=READ_ERROR, .value=NULL };
+    return create_empty_page_with_header(header, tb);
+}
+
 page *rearrange_page_order(page *pg) {
     database *db = pg->tb->db;
     page *pg_to_move = db->all_loaded_pages[db->header->next_page_to_save_number];
@@ -141,6 +171,33 @@ page *rearrange_page_order(page *pg) {
     return move_second_page ? pg_to_move : NULL;
 }
 
+maybe_page get_page_header(database *db, table *tb, size_t page_number) {
+    if (db->all_loaded_pages[page_number] != NULL && db->all_loaded_pages[page_number]->pgheader != NULL) {
+        return (maybe_page) { .error=OK, .value=db->all_loaded_pages[page_number] };
+    } else {
+        maybe_page read_page = read_page_header(db, tb, page_number);
+        if (read_page.error) return read_page;
+        if (db->loaded_pages_count == db->loaded_pages_capacity)
+            expand_loaded_pages_memory(db);
+        db->all_loaded_pages[db->loaded_pages_count++] = read_page.value;
+        return read_page;
+    }
+}
+
+maybe_page find_page(database *db, database_closure predicate) {
+    for (size_t pg_index = 1; pg_index < db->loaded_pages_count; pg_index++) {
+        maybe_page pg_header = get_page_header(db, NULL, pg_index);
+        if (pg_header.error) return pg_header;
+        if (predicate.func(predicate.value1, pg_header.value)) {
+            result page_data_read_error = read_page_data(db, pg_header.value);
+            if (page_data_read_error) 
+                return (maybe_page) { .error=page_data_read_error, .value=NULL };
+            return pg_header;
+        }
+    }
+    return (maybe_page) { .error=DONT_EXIST, .value=NULL };
+}
+
 result write_page(page *pg) {
     if (pg->tb->db->header->next_page_to_save_number < pg->pgheader->page_number) {
         return INVALID_PAGE_NUMBER;
@@ -152,7 +209,7 @@ result write_page(page *pg) {
     return OK;
 }
 
-maybe_page create_page(table *tb, page_type type) {
+maybe_page create_page(database *db, table *tb, page_type type) {
     page_header *header = malloc(sizeof(page_header));
     if (header == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
 
@@ -165,7 +222,7 @@ maybe_page create_page(table *tb, page_type type) {
     page *pg = malloc(sizeof(page));
     if (pg == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
 
-    header->page_number = get_page_number(tb->db, pg);
+    header->page_number = get_page_number(db, pg);
 
     pg->pgheader = header;
     pg->tb = tb;
@@ -173,23 +230,6 @@ maybe_page create_page(table *tb, page_type type) {
     if (pg->data == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
 
     return (maybe_page) { .error=OK, .value=pg };
-}
-
-maybe_page create_empty_page_with_header(page_header *header, table *tb) {
-    page *pg = malloc(sizeof(page));
-    if (pg == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
-    pg->pgheader = header;
-    pg->tb = tb;
-    return (maybe_page) { .error=OK, .value=pg };
-}
-
-maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal) {
-    size_t page_offset = count_offset_to_page_header(db, page_ordinal);
-    fseek(db->file, page_offset, SEEK_SET);
-    page_header *header = (page_header *) malloc(sizeof(page_header));
-    size_t read = fread(header, sizeof(page_header), 1, db->file);
-    if (read != 1) return (maybe_page){.error=READ_ERROR, .value=NULL };
-    return create_empty_page_with_header(header, tb);
 }
 
 page *get_first_writable_page(page *pg) {
@@ -202,11 +242,12 @@ page *get_first_writable_page(page *pg) {
 // Перебираем все страницы с доступным местом пока не найдем ту, в которую можем пихнуть строку
 maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
     maybe_page pg = (maybe_page) {};
-    if (tb->first_string_page_to_write == NULL && ( pg = create_page(tb, type) ).error )
+    if (tb->first_string_page_to_write == NULL && ( pg = create_page(tb->db, tb, type) ).error )
         return (maybe_page) { .error=pg.error, .value=NULL };
     if (pg.value != NULL) {
         tb->first_string_page_to_write = pg.value;
         tb->first_string_page = pg.value;
+        tb->header->first_string_page_num = pg.value->pgheader->page_number;
         pg.value->pgheader->data_offset = 0;
     }
 
@@ -219,7 +260,7 @@ maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
     // проверку на MIN_VALUABLE_SIZE все равно сделать нужно
     if (writable_page->pgheader->data_offset + data_size > PAGE_SIZE) {
         maybe_page new_pg;
-        if ( !( new_pg = create_page(tb, type) ).error )
+        if ( !( new_pg = create_page(tb->db, tb, type) ).error )
             return (maybe_page) { .error=new_pg.error, .value=NULL };
         writable_page = new_pg.value;
 
@@ -250,11 +291,12 @@ maybe_page get_page_by_number(database *db, uint64_t page_ordinal) {
 
 result ensure_enough_space_table(table *tb, size_t data_size, page_type type) {
     maybe_page pg = (maybe_page) {};
-    if (tb->first_page_to_write == NULL && ( pg = create_page(tb, type) ).error )
+    if (tb->first_page_to_write == NULL && ( pg = create_page(tb->db, tb, type) ).error )
         return pg.error;
     if (pg.value != NULL) {
         tb->first_page_to_write = pg.value;
         tb->first_page = pg.value;
+        tb->header->first_data_page_num = pg.value->pgheader->page_number;
         pg.value->pgheader->data_offset = 0;
     }
 
@@ -262,7 +304,7 @@ result ensure_enough_space_table(table *tb, size_t data_size, page_type type) {
 
     if (writable_page_header->data_offset + data_size > PAGE_SIZE) {
         maybe_page new_pg;
-        if ( !( new_pg = create_page(tb, type) ).error )
+        if ( !( new_pg = create_page(tb->db, tb, type) ).error )
             return new_pg.error;
         if (new_pg.value != NULL) {
             tb->first_page_to_write->next_page = new_pg.value;

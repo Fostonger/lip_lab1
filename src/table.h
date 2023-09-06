@@ -10,6 +10,7 @@ typedef struct table table;
 #include "util.h"
 
 #define MAX_NAME_LENGTH 31
+#define MAX_COLUMN_AMOUNT 170
 
 enum column_type {
     INT_32,
@@ -26,8 +27,10 @@ struct column_header {
 struct table_header {
     uint8_t column_amount;
     uint16_t row_size;
+    uint16_t first_data_page_num;
+    uint16_t first_string_page_num;
     char name[MAX_NAME_LENGTH];
-    column_header columns[];
+    column_header columns[MAX_COLUMN_AMOUNT];
 };
 
 #include "database_manager.h"
