@@ -27,8 +27,8 @@ struct column_header {
 struct table_header {
     uint8_t column_amount;
     uint16_t row_size;
-    uint16_t first_data_page_num;
-    uint16_t first_string_page_num;
+    uint64_t first_data_page_num;
+    uint64_t first_string_page_num;
     char name[MAX_NAME_LENGTH];
     column_header columns[MAX_COLUMN_AMOUNT];
 };

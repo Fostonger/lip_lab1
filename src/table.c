@@ -79,16 +79,27 @@ maybe_table read_table(const char *tablename, database *db) {
     maybe_page pg_with_table = find_page(db, predicate);
     if (pg_with_table.error) return (maybe_table) { .error= pg_with_table.error, .value=NULL };
 
-    table *tb = malloc(sizeof(table));
-    if (tb == NULL) return (maybe_table) { .error=MALLOC_ERROR };
+    maybe_table tb = create_table(tablename, db);
+    if (tb.error) return tb;
 
-    tb->header = &(pg_with_table.value->pgheader->table_header);
-    tb->db = db;
-    tb->first_page = pg_with_table.value;
+    tb.value->header = &(pg_with_table.value->pgheader->table_header);
+    tb.value->db = db;
+    tb.value->first_page = pg_with_table.value;
+    tb.value->first_page_to_write = pg_with_table.value;
+    if (tb.value->header->first_string_page_num != 0) {
+        maybe_page first_string_page = get_page_by_number(tb.value->db, tb.value->header->first_string_page_num);
+        if (first_string_page.error) {
+            release_table(tb.value);
+            return (maybe_table) { .error=first_string_page.error, .value=NULL };
+        }
+        tb.value->first_string_page = first_string_page.value;
+        tb.value->first_string_page_to_write = first_string_page.value;
+        first_string_page.value->tb = tb.value;
+    }
 
-    pg_with_table.value->tb = tb;
+    pg_with_table.value->tb = tb.value;
 
-    return (maybe_table) { .error= OK, .value=tb };
+    return tb;
 }
 
 void release_table(table *tb) {

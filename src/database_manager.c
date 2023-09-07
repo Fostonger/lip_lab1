@@ -98,6 +98,8 @@ size_t count_offset_to_page_data(database *db, size_t ordinal_number) {
 }
 
 result write_page_header(page *pg) {
+    pg->pgheader->table_header = *(pg->tb->header);
+
     size_t page_offset = count_offset_to_page_header(pg->tb->db, pg->pgheader->page_number);
     fseek(pg->tb->db->file, page_offset, SEEK_SET);
     size_t written = fwrite(pg->pgheader, sizeof(page_header), 1, pg->tb->db->file);
@@ -144,6 +146,14 @@ maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal) {
     return create_empty_page_with_header(header, tb);
 }
 
+void update_table_header(page *pg, uint16_t new_pg_number) {
+    if (pg->tb->header->first_data_page_num == pg->pgheader->page_number)
+        pg->tb->header->first_data_page_num = new_pg_number;
+
+    if (pg->tb->header->first_string_page_num == pg->pgheader->page_number)
+        pg->tb->header->first_string_page_num = new_pg_number;
+}
+
 page *rearrange_page_order(page *pg) {
     database *db = pg->tb->db;
     page *pg_to_move = db->all_loaded_pages[db->header->next_page_to_save_number];
@@ -153,7 +163,11 @@ page *rearrange_page_order(page *pg) {
     size_t moved_page_number = pg->pgheader->page_number;
     size_t target_page_number = db->header->next_page_to_save_number;
 
-    if (move_second_page) pg_to_move->pgheader->page_number = moved_page_number;
+    if (move_second_page) {
+        update_table_header(pg_to_move, moved_page_number);
+        pg_to_move->pgheader->page_number = moved_page_number;
+    }
+    update_table_header(pg, target_page_number);
     pg->pgheader->page_number = target_page_number;
 
     for (size_t pages_index = 0; pages_index < moved_page_number; pages_index++) {
@@ -250,6 +264,7 @@ maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
         tb->first_string_page_to_write = pg.value;
         tb->first_string_page = pg.value;
         tb->header->first_string_page_num = pg.value->pgheader->page_number;
+        pg.value->pgheader->table_header = *(tb->header);
         pg.value->pgheader->data_offset = 0;
     }
 
@@ -261,14 +276,24 @@ maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
     // не нашли страницу подходящего размера, но это не значит, что можно забраковать все страницы!
     // проверку на MIN_VALUABLE_SIZE все равно сделать нужно
     if (writable_page->pgheader->data_offset + data_size > PAGE_SIZE) {
-        maybe_page new_pg;
-        if ( !( new_pg = create_page(tb->db, tb, type) ).error )
-            return (maybe_page) { .error=new_pg.error, .value=NULL };
-        writable_page = new_pg.value;
+        maybe_page new_pg = read_page_header(tb->db, tb, writable_page->pgheader->next_page_number);
+        while (!new_pg.error && new_pg.value->pgheader->data_offset + data_size > PAGE_SIZE) {
+            new_pg = read_page_header(tb->db, tb, writable_page->pgheader->next_page_number);
+        }
+        if (!new_pg.error) {
+            read_page_data(tb->db, new_pg.value);
+            tb->first_string_page_to_write->next_page = new_pg.value;
+            tb->first_string_page_to_write = new_pg.value;
+            writable_page = new_pg.value;
+        } else {
+            if ( !( new_pg = create_page(tb->db, tb, type) ).error )
+                return (maybe_page) { .error=new_pg.error, .value=NULL };
+            writable_page = new_pg.value;
 
-        page *last_page = tb->first_string_page;
-        while (last_page->next_page != NULL) last_page = last_page->next_page;
-        last_page->next_page = new_pg.value;
+            page *last_page = tb->first_string_page;
+            while (last_page->next_page != NULL) last_page = last_page->next_page;
+            last_page->next_page = new_pg.value;
+        }
     }
 
     // проверка на MIN_VALUABLE_SIZE
@@ -319,13 +344,22 @@ result ensure_enough_space_table(table *tb, size_t data_size, page_type type) {
     page_header *writable_page_header = tb->first_page_to_write->pgheader;
 
     if (writable_page_header->data_offset + data_size > PAGE_SIZE) {
-        maybe_page new_pg;
-        if ( !( new_pg = create_page(tb->db, tb, type) ).error )
-            return new_pg.error;
-        if (new_pg.value != NULL) {
+        maybe_page new_pg = read_page_header(tb->db, tb, writable_page_header->next_page_number);
+        while (!new_pg.error && new_pg.value->pgheader->data_offset + data_size > PAGE_SIZE) {
+            new_pg = read_page_header(tb->db, tb, writable_page_header->next_page_number);
+        }
+        if (!new_pg.error) {
+            read_page_data(tb->db, new_pg.value);
             tb->first_page_to_write->next_page = new_pg.value;
             tb->first_page_to_write = new_pg.value;
-            new_pg.value->pgheader->data_offset = 0;
+        } else {
+            if ( !( new_pg = create_page(tb->db, tb, type) ).error )
+                return new_pg.error;
+            if (new_pg.value != NULL) {
+                tb->first_page_to_write->next_page = new_pg.value;
+                tb->first_page_to_write = new_pg.value;
+                new_pg.value->pgheader->data_offset = 0;
+            }
         }
     }
 
