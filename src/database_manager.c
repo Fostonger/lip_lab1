@@ -171,14 +171,14 @@ page *rearrange_page_order(page *pg) {
     pg->pgheader->page_number = target_page_number;
 
     for (size_t pages_index = 0; pages_index < moved_page_number; pages_index++) {
-        maybe_page pg_header_on_disk = read_page_header(pg->tb->db, pg->tb, pages_index);
+        maybe_page pg_header_on_disk = get_page_header(pg->tb->db, pg->tb, pages_index);
         if(pg_header_on_disk.error) continue;
         if(pg_header_on_disk.value->pgheader->next_page_number == moved_page_number) {
             pg_header_on_disk.value->pgheader->next_page_number = target_page_number;
-            write_page_header(pg_header_on_disk.value);
+            if (pages_index < target_page_number) write_page_header(pg_header_on_disk.value);
         } else if (pg_header_on_disk.value->pgheader->next_page_number == target_page_number) {
             pg_header_on_disk.value->pgheader->next_page_number = moved_page_number;
-            write_page_header(pg_header_on_disk.value);
+            if (pages_index < target_page_number) write_page_header(pg_header_on_disk.value);
         }
     }
     db->all_loaded_pages[moved_page_number] = pg_to_move;
