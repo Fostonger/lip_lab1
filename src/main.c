@@ -152,11 +152,14 @@ int main(void) {
     char *filename = "database.fost.data";
     FILE *dbfile = fopen(filename, "r+");
 
-    maybe_database db = initdb(dbfile, true);
+    maybe_database db = initdb(dbfile, false);
     if (db.error) {
         print_if_failure(db.error);
         return 1;
     }
+    table *t0 = read_table("merged table", db.value).value;
+    print_table(t0);
+
     table *t1 = create_table("table1", db.value).value;
     table *t2 = create_table("table2", db.value).value;
     add_column(t1, "ints", INT_32);
@@ -189,7 +192,7 @@ int main(void) {
     if  (   !print_if_failure( data_init_integer(data1.value, 20) ) 
         ||  !print_if_failure( data_init_boolean(data1.value, 1) )
         ||  !print_if_failure( data_init_float(data1.value, 7.08) )
-        ||  !print_if_failure( data_init_string(data1.value, "alina string") ) ) {
+        ||  !print_if_failure( data_init_string(data1.value, "alina string safer version") ) ) {
 
             release_table(t1);
             release_data(data1.value);
@@ -265,6 +268,8 @@ int main(void) {
     maybe_table joined_tb = join_table(t1, t2, "ints", INT_32, "merged table");
     if ( !print_if_failure(joined_tb.error) ) return 1;
     print_table(joined_tb.value);
+
+    print_table(t1);
 
     print_if_failure(save_table(db.value, joined_tb.value));
 

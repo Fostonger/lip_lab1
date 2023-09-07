@@ -87,6 +87,8 @@ maybe_table read_table(const char *tablename, database *db) {
     tb->first_page = pg_with_table.value;
 
     pg_with_table.value->tb = tb;
+
+    return (maybe_table) { .error= OK, .value=tb };
 }
 
 void release_table(table *tb) {

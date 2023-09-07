@@ -33,8 +33,8 @@ maybe_database allocate_db(FILE *file) {
     }
 
     header->page_size = PAGE_SIZE;
-    header->first_free_page = 0;
-    header->next_page_to_save_number = 0;
+    header->first_free_page = 1;
+    header->next_page_to_save_number = 1;
     db_val->header = header;
 
     db_val->all_loaded_pages = (page **)malloc(sizeof(page *) * 100);
@@ -63,6 +63,8 @@ maybe_database read_db(FILE *file) {
         release_db(db.value);
         return (maybe_database){ .error=read_error, .value=NULL };
     }
+    db.value->loaded_pages_count = db.value->header->first_free_page - 1;
+    db.value->loaded_pages_capacity = 100;
     return db;
 }
 
@@ -83,7 +85,7 @@ uint16_t get_page_number(database *db, page *pg) {
     uint16_t page_num = db->header->first_free_page++;
     if (db->loaded_pages_count == db->loaded_pages_capacity)
         expand_loaded_pages_memory(db);
-    db->all_loaded_pages[db->loaded_pages_count++] = pg;
+    db->all_loaded_pages[page_num] = pg;
     return page_num;
 }
 
@@ -185,10 +187,10 @@ maybe_page get_page_header(database *db, table *tb, size_t page_number) {
 }
 
 maybe_page find_page(database *db, database_closure predicate) {
-    for (size_t pg_index = 1; pg_index < db->loaded_pages_count; pg_index++) {
+    for (size_t pg_index = 1; pg_index < db->loaded_pages_capacity; pg_index++) {
         maybe_page pg_header = get_page_header(db, NULL, pg_index);
         if (pg_header.error) return pg_header;
-        if (predicate.func(predicate.value1, pg_header.value)) {
+        if (predicate.func(predicate.value1, pg_header.value->pgheader)) {
             result page_data_read_error = read_page_data(db, pg_header.value);
             if (page_data_read_error) 
                 return (maybe_page) { .error=page_data_read_error, .value=NULL };
@@ -283,9 +285,21 @@ maybe_page get_next_page_or_load(page *pg) {
 }
 
 maybe_page get_page_by_number(database *db, uint64_t page_ordinal) {
-    if (page_ordinal > db->loaded_pages_count || db->all_loaded_pages[page_ordinal]->pgheader == NULL ) // доделать
-        return (maybe_page) { .error=DONT_EXIST, .value=NULL };
-    maybe_page pg = (maybe_page) { .error=OK, .value=db->all_loaded_pages[page_ordinal] };
+    while (page_ordinal > db->loaded_pages_capacity) {
+        expand_loaded_pages_memory(db);
+    }
+    if ( db->all_loaded_pages[page_ordinal] == NULL ) {
+        maybe_page read_page = read_page_header(db, NULL, page_ordinal);
+        if (read_page.error) return read_page;
+
+        result read_page_data_error = read_page_data(db, read_page.value);
+        if (read_page_data_error) return (maybe_page) { .error=read_page_data_error, .value=NULL };
+
+        db->all_loaded_pages[page_ordinal] = read_page.value;
+        return read_page;
+    }
+    page *loaded_page = db->all_loaded_pages[page_ordinal];
+    maybe_page pg = (maybe_page) { .error=OK, .value=loaded_page };
     return pg;
 }
 

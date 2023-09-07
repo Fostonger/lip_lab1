@@ -314,8 +314,6 @@ void prepare_string_data_for_saving(page *pg) {
             bytes_moved_now = delete_saved_string(pg, (char *)cur_string_data - (char *)pg->data);
             bytes_moved += bytes_moved_now;
             pg->pgheader->data_offset -= bytes_moved_now;
-            correct_string_references_on_page(pg->tb, pg, (char *)pg_with_string_ref.value->data, bytes_moved,
-                pg->pgheader->page_number, cur_string_data->offset_to_ref, true);
             continue;
         }
         if (cur_string_data->page != pg_with_string_ref.value->pgheader->page_number) {
