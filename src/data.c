@@ -331,9 +331,8 @@ void prepare_string_data_for_saving(page *pg) {
 }
 
 void prepare_table_data_for_saving(page *pg) {
-    maybe_data dt = init_data(pg->tb);
+    maybe_data dt = init_empty_data(pg->tb);
     if (dt.error) return;
-    free(dt.value->bytes);
     dt.value->bytes = pg->data;
     size_t offset_to_row = 0;
     while(has_next_data_on_page(pg, dt.value->bytes)) {

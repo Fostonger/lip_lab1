@@ -218,7 +218,7 @@ maybe_page create_page(database *db, table *tb, page_type type) {
     header->data_offset = 0;
     header->table_header = *tb->header;
     header->rows_count = 0;
-    header->next_page_number = -1;
+    header->next_page_number = 0;
     header->type = type;
 
     page *pg = malloc(sizeof(page));
@@ -285,6 +285,8 @@ maybe_page get_next_page_or_load(page *pg) {
 }
 
 maybe_page get_page_by_number(database *db, uint64_t page_ordinal) {
+    if (page_ordinal == 0) 
+        return (maybe_page) { .error=DONT_EXIST, .value=NULL };
     while (page_ordinal > db->loaded_pages_capacity) {
         expand_loaded_pages_memory(db);
     }
