@@ -91,7 +91,7 @@ uint16_t get_page_number(database *db, page *pg) {
 }
 
 size_t count_offset_to_page_header(database *db, size_t ordinal_number) {
-    return sizeof(database_header) + (sizeof(page_header) + db->header->page_size) * ordinal_number;
+    return sizeof(database_header) + (sizeof(page_header) + db->header->page_size) * (ordinal_number - 1);
 }
 
 size_t count_offset_to_page_data(database *db, size_t ordinal_number) {
