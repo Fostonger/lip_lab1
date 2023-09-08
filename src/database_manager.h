@@ -32,7 +32,6 @@ struct page_header {
     uint64_t page_number;
     uint64_t next_page_number;
     uint16_t data_offset;
-    uint16_t rows_count;
     page_type type;
     table_header table_header;
 };
@@ -66,6 +65,7 @@ void release_db(database *db);
 
 maybe_page create_page(database *db, table *tb, page_type type);
 maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal);
+maybe_page get_page_header(database *db, table *tb, size_t page_number);
 result read_page_data(database *db, page *pg_to_read);
 maybe_page find_page(database *db, database_closure predicate);
 page *rearrange_page_order(page *pg_to_save);

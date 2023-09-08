@@ -152,13 +152,13 @@ int main(void) {
     char *filename = "database.fost.data";
     FILE *dbfile = fopen(filename, "r+");
 
-    maybe_database db = initdb(dbfile, false);
+    maybe_database db = initdb(dbfile, true);
     if (db.error) {
         print_if_failure(db.error);
         return 1;
     }
-    table *t0 = read_table("merged table", db.value).value;
-    print_table(t0);
+    // table *t0 = read_table("merged table", db.value).value;
+    // print_table(t0);
 
     table *t1 = create_table("table1", db.value).value;
     table *t2 = create_table("table2", db.value).value;
@@ -269,20 +269,20 @@ int main(void) {
     if ( !print_if_failure(joined_tb.error) ) return 1;
     print_table(joined_tb.value);
 
-    maybe_data data_joined = init_data(t0);
-    if (data_joined.error) {
-        print_if_failure(data_joined.error);
-        return 1;
-    }
-    maybe_data_iterator iterator_joined = init_iterator(joined_tb.value);
-    if (iterator_joined.error) return 1;
+    // maybe_data data_joined = init_data(t0);
+    // if (data_joined.error) {
+    //     print_if_failure(data_joined.error);
+    //     return 1;
+    // }
+    // maybe_data_iterator iterator_joined = init_iterator(joined_tb.value);
+    // if (iterator_joined.error) return 1;
 
-    copy_data(data_joined.value, iterator_joined.value->cur_data);
-    set_data(data_joined.value);
-    print_table(t0);
-    print_if_failure(save_table(db.value, t0));
+    // copy_data(data_joined.value, iterator_joined.value->cur_data);
+    // set_data(data_joined.value);
+    // print_table(t0);
+    // print_if_failure(save_table(db.value, t0));
 
-    print_table(t1);
+    // print_table(t1);
 
     print_if_failure(save_table(db.value, joined_tb.value));
 

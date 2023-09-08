@@ -63,6 +63,7 @@ maybe_database read_db(FILE *file) {
         release_db(db.value);
         return (maybe_database){ .error=read_error, .value=NULL };
     }
+    db.value->header->first_free_page = db.value->header->next_page_to_save_number;
     db.value->loaded_pages_count = db.value->header->first_free_page - 1;
     db.value->loaded_pages_capacity = 100;
     return db;
@@ -99,6 +100,8 @@ size_t count_offset_to_page_data(database *db, size_t ordinal_number) {
 
 result write_page_header(page *pg) {
     pg->pgheader->table_header = *(pg->tb->header);
+    if (pg->tb->db->header->next_page_to_save_number == pg->pgheader->page_number)
+        pg->tb->db->header->next_page_to_save_number++;
 
     size_t page_offset = count_offset_to_page_header(pg->tb->db, pg->pgheader->page_number);
     fseek(pg->tb->db->file, page_offset, SEEK_SET);
@@ -113,7 +116,6 @@ result write_page_data(page *pg) {
     size_t written = fwrite(pg->data, pg->tb->db->header->page_size, 1, pg->tb->db->file);
     if (written != 1) return WRITE_ERROR;
 
-    pg->tb->db->header->next_page_to_save_number++;
     write_db_header(pg->tb->db);
     
     return OK;
@@ -195,7 +197,7 @@ maybe_page get_page_header(database *db, table *tb, size_t page_number) {
         if (read_page.error) return read_page;
         if (db->loaded_pages_count == db->loaded_pages_capacity)
             expand_loaded_pages_memory(db);
-        db->all_loaded_pages[db->loaded_pages_count++] = read_page.value;
+        db->all_loaded_pages[page_number] = read_page.value;
         return read_page;
     }
 }
@@ -231,7 +233,6 @@ maybe_page create_page(database *db, table *tb, page_type type) {
 
     header->data_offset = 0;
     header->table_header = *tb->header;
-    header->rows_count = 0;
     header->next_page_number = 0;
     header->type = type;
 

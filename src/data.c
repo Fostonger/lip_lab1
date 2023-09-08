@@ -148,14 +148,13 @@ result set_data(data *dt) {
     char *data_ptr = dt->bytes;
 
     page *pg_to_write = dt->table->first_page_to_write;
-    uint64_t offset_to_row = pg_to_write->pgheader->rows_count * dt->table->header->row_size;
+    uint64_t offset_to_row = pg_to_write->pgheader->data_offset;
 
     set_page_info_in_strings(dt, pg_to_write->pgheader->page_number, offset_to_row);
 
     void **table_ptr = pg_to_write->data + offset_to_row;
     memcpy(table_ptr, data_ptr, dt->size);
 
-    dt->table->first_page_to_write->pgheader->rows_count += 1;
     dt->table->first_page_to_write->pgheader->data_offset += dt->size;
 
     return OK;
@@ -218,7 +217,8 @@ void make_string_disabled(page *page_string, uint16_t offset) {
 
 bool has_next_data_on_page(page *cur_page, char *cur_data) {
     return cur_data - (char *)cur_page->data < PAGE_SIZE 
-            && ( cur_data - (char *)cur_page->data ) / cur_page->tb->header->row_size < cur_page->pgheader->rows_count;
+            && ( cur_data - (char *)cur_page->data ) / cur_page->tb->header->row_size < 
+                cur_page->pgheader->data_offset / cur_page->tb->header->row_size;
 }
 
 void correct_string_references_on_page(table *tb, page *pg_with_string_data, char *cur_data, size_t bytes_moved, size_t new_page_num, size_t string_offset, bool whole_pg ) {
@@ -282,12 +282,11 @@ void sync_storage_by_table(data *dt, size_t bytes_moved) {
 result delete_saved_row(data *dt) {
     result delete_string_result = delete_strings_from_row(dt);
     if (delete_string_result) return delete_string_result;
-    dt->table->first_page_to_write->pgheader->rows_count -= 1;
     dt->table->first_page_to_write->pgheader->data_offset -= dt->size;
 
     void *data_ptr = dt->bytes;
     void *table_ptr = dt->table->first_page_to_write->data
-                            + dt->table->first_page_to_write->pgheader->rows_count * dt->table->header->row_size;
+                            + dt->table->first_page_to_write->pgheader->data_offset;
     if (data_ptr != table_ptr) memcpy(data_ptr, table_ptr, dt->size);
 
     sync_storage_by_table(dt, table_ptr - data_ptr);
