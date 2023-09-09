@@ -16,7 +16,7 @@ typedef struct {
 typedef struct {
     uint64_t string_page_number;
     uint16_t offset;
-} string_in_table_data;
+} string_data_ref;
 
 maybe_data init_empty_data(table *tb) {
     data *dt = malloc(sizeof(data));
@@ -65,7 +65,7 @@ result data_init_string(data *dt, const char* val) {
     page *writable_page = suitable_page.value;
 
     // Данные о строке заносим в таблицу: ссылка на страницу, в которой хранится строка, и отступ от начала страницы
-    string_in_table_data *string_in_table = (string_in_table_data *)ptr;
+    string_data_ref *string_in_table = (string_data_ref *)ptr;
     string_in_table->offset = writable_page->pgheader->data_offset;
     string_in_table->string_page_number = writable_page->pgheader->page_number;
 
@@ -127,7 +127,7 @@ void set_page_info_in_strings(data *dt, size_t string_pg_num, uint64_t offset_to
         if (header.type != STRING) continue;
 
         size_t string_offset = offset_to_column(dt->table->header, header.name, STRING);
-        string_in_table_data *string_ref = (string_in_table_data *)((char *)dt->bytes + string_offset);
+        string_data_ref *string_ref = (string_data_ref *)((char *)dt->bytes + string_offset);
 
         if (pg_with_string_data->pgheader->page_number < string_ref->string_page_number) {
             maybe_page page_with_string = get_page_by_number(dt->table->db, string_ref->string_page_number);
@@ -222,7 +222,7 @@ bool has_next_data_on_page(page *cur_page, char *cur_data) {
 }
 
 void correct_string_references_on_page(table *tb, page *pg_with_string_data, char *cur_data, size_t bytes_moved, size_t new_page_num, size_t string_offset, bool whole_pg ) {
-    string_in_table_data *cur_string_ref = (string_in_table_data *) (cur_data + string_offset);
+    string_data_ref *cur_string_ref = (string_data_ref *) (cur_data + string_offset);
 
     string_in_storage *cur_string_data = (string_in_storage *)(pg_with_string_data->data + cur_string_ref->offset);
     maybe_page pg_with_string_ref = get_page_by_number(tb->db, cur_string_data->page);
@@ -233,7 +233,7 @@ void correct_string_references_on_page(table *tb, page *pg_with_string_data, cha
             if (pg_with_string_ref.error) return;
         }
 
-        cur_string_ref = (string_in_table_data *) ((char *)pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
+        cur_string_ref = (string_data_ref *) ((char *)pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
 
         cur_string_ref->offset -= bytes_moved;
         cur_string_ref->string_page_number = new_page_num;
@@ -255,7 +255,7 @@ result delete_strings_from_row(data *dt) {
         if (header.type != STRING) continue;
         
         size_t string_offset = offset_to_column(dt->table->header, header.name, STRING);
-        string_in_table_data *string_data = (string_in_table_data *)((char *)dt->bytes + string_offset);
+        string_data_ref *string_data = (string_data_ref *)((char *)dt->bytes + string_offset);
 
         maybe_page page_with_string = get_page_by_number(dt->table->db, string_data->string_page_number);
         if (page_with_string.error) return page_with_string.error;
@@ -270,7 +270,7 @@ void sync_storage_by_table(data *dt, size_t bytes_moved) {
         if (header.type != STRING) continue;
         
         size_t string_offset = offset_to_column(dt->table->header, header.name, STRING);
-        string_in_table_data *string_ref = (string_in_table_data *)((char *)dt->bytes + string_offset);
+        string_data_ref *string_ref = (string_data_ref *)((char *)dt->bytes + string_offset);
 
         maybe_page page_with_string = get_page_by_number(dt->table->db, string_ref->string_page_number);
         string_in_storage *cur_string_data = (string_in_storage *)(page_with_string.value->data + string_ref->offset);
@@ -304,7 +304,7 @@ void prepare_string_data_for_saving(page *pg) {
     maybe_page pg_with_string_ref = get_page_by_number(pg->tb->db, cur_string_data->page);
     if (pg_with_string_ref.error) return;
 
-    string_in_table_data *cur_string_ref = (string_in_table_data *) (pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
+    string_data_ref *cur_string_ref = (string_data_ref *) (pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
 
     size_t bytes_moved = 0;
     while(cur_string_data != NULL) {
@@ -320,7 +320,7 @@ void prepare_string_data_for_saving(page *pg) {
             if (pg_with_string_ref.error) return;
         }
 
-        cur_string_ref = (string_in_table_data *) ((char *)pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
+        cur_string_ref = (string_data_ref *) ((char *)pg_with_string_ref.value->data + cur_string_data->offset_to_ref);
 
         cur_string_ref->string_page_number = pg->pgheader->page_number;
         cur_string_ref->offset -= bytes_moved;
@@ -340,7 +340,7 @@ void prepare_table_data_for_saving(page *pg) {
             if (header.type != STRING) continue;
 
             size_t string_offset = offset_to_column(pg->tb->header, header.name, STRING);
-            string_in_table_data *string_ref = (string_in_table_data *)((char *)dt.value->bytes + string_offset);
+            string_data_ref *string_ref = (string_data_ref *)((char *)dt.value->bytes + string_offset);
 
             maybe_page page_with_string = get_page_by_number(pg->tb->db, string_ref->string_page_number);
             if (page_with_string.error) return ;
@@ -370,8 +370,8 @@ void get_integer_from_data(data *dt, int32_t *dest, size_t offset) {
 }
 
 void get_string_from_data(data *dt, char **dest, size_t data_offset) {
-    string_in_table_data *string_data_ptr = (string_in_table_data *)((char *)dt->bytes + data_offset);
-    string_in_table_data *string_in_table = string_data_ptr;
+    string_data_ref *string_data_ptr = (string_data_ref *)((char *)dt->bytes + data_offset);
+    string_data_ref *string_in_table = string_data_ptr;
     maybe_page page_with_string = get_page_by_number(dt->table->db, string_in_table->string_page_number);
     if (page_with_string.error) return;
     string_in_storage *target_string = (string_in_storage *)((char *)page_with_string.value->data + string_in_table->offset);
