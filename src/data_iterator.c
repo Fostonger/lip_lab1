@@ -34,7 +34,10 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
         any_value value;
         get_any(iter, &value, offset, type);
 
-        if ( clr.func(&clr.value1, &value) ) return true;
+        if ( clr.func(&clr.value1, &value) ) {
+            if (type == STRING) free(value.string_value);
+            return true;
+        }
 
         get_next(iter);
     }
@@ -183,7 +186,7 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
 
     while (has_next(iterator1.value)) {
         any_value val1;
-        get_any_from_data(iterator1.value->cur_data, &val1, offset_to_column1, type);
+        get_any(iterator1.value, &val1, offset_to_column1, type);
         closure join_closure = join_func(val1, type);
 
         while (seek_next_where(iterator2.value, type, column_name, join_closure)) {
@@ -192,16 +195,19 @@ maybe_table join_table(table *tb1, table *tb2, const char *column_name, column_t
                 iterator2.value->cur_data, column_name, type);
             if (join_data_error) {
                 new_tb = (maybe_table) { .error=join_data_error, .value=new_tb.value };
+                if (type == STRING) free(val1.string_value);
                 goto joined_data_release;
             }
             result set_data_error = set_data(joined_data.value);
             if (join_data_error) {
                 new_tb = (maybe_table) { .error=set_data_error, .value=new_tb.value };
+                if (type == STRING) free(val1.string_value);
                 goto joined_data_release;
             }
             clear_data(joined_data.value);
             get_next(iterator2.value);
         }
+        if (type == STRING) free(val1.string_value);
         reset_iterator(iterator2.value, tb2);
         get_next(iterator1.value);
     }

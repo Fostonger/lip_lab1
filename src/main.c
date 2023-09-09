@@ -287,6 +287,7 @@ int main(void) {
     // print_table(t1);
 
     print_if_failure(save_table(db.value, joined_tb.value));
+    print_table(joined_tb.value);
 
     print_table(t1);
 
