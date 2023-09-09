@@ -44,8 +44,7 @@ result save_table(database *db, table *tb) {
                 prepare_data_for_saving(moved_page);
             prepare_data_for_saving(page_to_save);
         }
-        result write_error = write_page(page_to_save);
-        if (write_error) return write_error;
+        mark_page_saved_without_saving(page_to_save);
         page_to_save = page_to_save->next_page;
     }
     page_to_save = tb->first_string_page;
@@ -56,12 +55,18 @@ result save_table(database *db, table *tb) {
                 prepare_data_for_saving(moved_page);
             prepare_data_for_saving(page_to_save);
         }
-        result write_error = write_page(page_to_save);
-        if (write_error) return write_error;
+        mark_page_saved_without_saving(page_to_save);
         page_to_save = page_to_save->next_page;
     }
     
     page_to_save = tb->first_page;
+    while (page_to_save != NULL) {
+        result write_error = write_page(page_to_save);
+        if (write_error) return write_error;
+        page_to_save = page_to_save->next_page;
+    }
+
+    page_to_save = tb->first_string_page;
     while (page_to_save != NULL) {
         result write_error = write_page(page_to_save);
         if (write_error) return write_error;

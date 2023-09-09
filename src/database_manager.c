@@ -98,11 +98,15 @@ size_t count_offset_to_page_data(database *db, size_t ordinal_number) {
     return count_offset_to_page_header(db, ordinal_number) + sizeof(page_header);
 }
 
-result write_page_header(page *pg) {
-    pg->pgheader->table_header = *(pg->tb->header);
+void mark_page_saved_without_saving(page *pg) {
     if (pg->tb->db->header->next_page_to_save_number == pg->pgheader->page_number)
         pg->tb->db->header->next_page_to_save_number++;
+}
 
+result write_page_header(page *pg) {
+    pg->pgheader->table_header = *(pg->tb->header);
+    mark_page_saved_without_saving(pg);
+    
     size_t page_offset = count_offset_to_page_header(pg->tb->db, pg->pgheader->page_number);
     fseek(pg->tb->db->file, page_offset, SEEK_SET);
     size_t written = fwrite(pg->pgheader, sizeof(page_header), 1, pg->tb->db->file);

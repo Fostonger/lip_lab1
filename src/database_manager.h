@@ -64,6 +64,7 @@ maybe_database initdb(FILE *file, bool overwrite);
 void release_db(database *db);
 
 maybe_page create_page(database *db, table *tb, page_type type);
+void mark_page_saved_without_saving(page *pg);
 maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal);
 maybe_page get_page_header(database *db, table *tb, size_t page_number);
 result read_page_data(database *db, page *pg_to_read);
