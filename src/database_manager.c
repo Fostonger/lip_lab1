@@ -140,6 +140,8 @@ maybe_page create_empty_page_with_header(page_header *header, table *tb) {
 }
 
 maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal) {
+    if (page_ordinal == 0) return (maybe_page){.error=DONT_EXIST, .value=NULL };
+
     size_t page_offset = count_offset_to_page_header(db, page_ordinal);
     fseek(db->file, page_offset, SEEK_SET);
     page_header *header = (page_header *) malloc(sizeof(page_header));
@@ -287,13 +289,14 @@ maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
             tb->first_string_page_to_write = new_pg.value;
             writable_page = new_pg.value;
         } else {
-            if ( !( new_pg = create_page(tb->db, tb, type) ).error )
+            if ( ( new_pg = create_page(tb->db, tb, type) ).error )
                 return (maybe_page) { .error=new_pg.error, .value=NULL };
             writable_page = new_pg.value;
 
             page *last_page = tb->first_string_page;
             while (last_page->next_page != NULL) last_page = last_page->next_page;
             last_page->next_page = new_pg.value;
+            last_page->pgheader->next_page_number = new_pg.value->pgheader->page_number;
         }
     }
 
