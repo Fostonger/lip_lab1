@@ -106,7 +106,7 @@ void mark_page_saved_without_saving(page *pg) {
 result write_page_header(page *pg) {
     pg->pgheader->table_header = *(pg->tb->header);
     mark_page_saved_without_saving(pg);
-    
+
     size_t page_offset = count_offset_to_page_header(pg->tb->db, pg->pgheader->page_number);
     fseek(pg->tb->db->file, page_offset, SEEK_SET);
     size_t written = fwrite(pg->pgheader, sizeof(page_header), 1, pg->tb->db->file);
@@ -127,6 +127,7 @@ result write_page_data(page *pg) {
 
 result read_page_data(database *db, page *pg_to_read) {
     if (pg_to_read == NULL || pg_to_read->pgheader == NULL) return DONT_EXIST;
+    if (pg_to_read->data != NULL) return OK;
     size_t page_offset = count_offset_to_page_data(db, pg_to_read->pgheader->page_number);
     fseek(db->file, page_offset, SEEK_SET);
     pg_to_read->data = malloc(db->header->page_size);
@@ -197,6 +198,7 @@ page *rearrange_page_order(page *pg) {
 
 maybe_page get_page_header(database *db, table *tb, size_t page_number) {
     if (db->all_loaded_pages[page_number] != NULL && db->all_loaded_pages[page_number]->pgheader != NULL) {
+        if (tb != NULL) db->all_loaded_pages[page_number]->tb = tb;
         return (maybe_page) { .error=OK, .value=db->all_loaded_pages[page_number] };
     } else {
         maybe_page read_page = read_page_header(db, tb, page_number);
@@ -257,8 +259,11 @@ maybe_page create_page(database *db, table *tb, page_type type) {
 
 page *get_first_writable_page(page *pg) {
     page *cur_pg = pg;
-    while (cur_pg->next_page != NULL && PAGE_SIZE - cur_pg->pgheader->data_offset < MIN_VALUABLE_SIZE)
-        cur_pg = cur_pg->next_page;
+    while (cur_pg->pgheader->next_page_number != 0 && PAGE_SIZE - cur_pg->pgheader->data_offset < MIN_VALUABLE_SIZE) {
+        maybe_page next_pg = get_page_header(pg->tb->db, pg->tb, cur_pg->pgheader->next_page_number);
+        if (next_pg.error) break;
+        cur_pg = next_pg.value;
+    }
     return cur_pg;
 }
 
@@ -284,10 +289,10 @@ maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
     // проверку на MIN_VALUABLE_SIZE все равно сделать нужно
     if (writable_page->pgheader->data_offset + data_size > PAGE_SIZE) {
         maybe_page new_pg = read_page_header(tb->db, tb, writable_page->pgheader->next_page_number);
-        while (!new_pg.error && new_pg.value->pgheader->data_offset + data_size > PAGE_SIZE) {
-            new_pg = read_page_header(tb->db, tb, writable_page->pgheader->next_page_number);
+        while (!new_pg.error && new_pg.value->pgheader->data_offset + data_size > PAGE_SIZE && new_pg.value->pgheader->next_page_number != 0) {
+            new_pg = read_page_header(tb->db, tb, new_pg.value->pgheader->next_page_number);
         }
-        if (!new_pg.error) {
+        if (!new_pg.error && new_pg.value->pgheader->data_offset + data_size <= PAGE_SIZE) {
             read_page_data(tb->db, new_pg.value);
             tb->first_string_page_to_write->next_page = new_pg.value;
             tb->first_string_page_to_write = new_pg.value;
@@ -298,17 +303,24 @@ maybe_page get_suitable_page(table *tb, size_t data_size, page_type type) {
             writable_page = new_pg.value;
 
             page *last_page = tb->first_string_page;
-            while (last_page->next_page != NULL) last_page = last_page->next_page;
+            while (last_page->pgheader->next_page_number != 0) {
+                maybe_page next_pg = get_page_header(tb->db, tb, last_page->pgheader->next_page_number);
+                if (next_pg.error) return next_pg;
+                last_page->next_page = next_pg.value;
+                last_page = next_pg.value;
+            }
             last_page->next_page = new_pg.value;
             last_page->pgheader->next_page_number = new_pg.value->pgheader->page_number;
         }
     }
 
+    result read_data_error = read_page_data(tb->db, writable_page);
+
     // проверка на MIN_VALUABLE_SIZE
     page *first_writable_page = get_first_writable_page(tb->first_string_page_to_write);
     if (first_writable_page != NULL) tb->first_string_page_to_write = first_writable_page;
 
-    return (maybe_page) { .error=OK, .value=writable_page };
+    return (maybe_page) { .error=read_data_error, .value=writable_page };
 }
 
 // TODO: load from disk if page is in storage
@@ -356,7 +368,7 @@ result ensure_enough_space_table(table *tb, size_t data_size, page_type type) {
         while (!new_pg.error && new_pg.value->pgheader->data_offset + data_size > PAGE_SIZE) {
             new_pg = read_page_header(tb->db, tb, writable_page_header->next_page_number);
         }
-        if (!new_pg.error) {
+        if (!new_pg.error && new_pg.value->pgheader->data_offset + data_size <= PAGE_SIZE) {
             read_page_data(tb->db, new_pg.value);
             tb->first_page_to_write->next_page = new_pg.value;
             tb->first_page_to_write = new_pg.value;
