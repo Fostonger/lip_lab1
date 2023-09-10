@@ -108,6 +108,7 @@ maybe_table read_table(const char *tablename, database *db) {
 }
 
 void release_table(table *tb) {
+    if (tb == NULL) return;
     release_page(tb->first_page);
     release_page(tb->first_string_page);
     free(tb->header);

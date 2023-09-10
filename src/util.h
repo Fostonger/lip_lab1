@@ -11,7 +11,9 @@ typedef enum {
     WRITE_ERROR,
     READ_ERROR,
     DIFFERENT_DB,
-    INVALID_PAGE_NUMBER
+    INVALID_PAGE_NUMBER,
+    NOT_EQUAL,
+    NOT_FOUND
 } result;
 
 typedef struct {
@@ -40,3 +42,4 @@ typedef struct {
     }
 
 int8_t print_if_failure( result result );
+const char *result_to_string(result rslt);

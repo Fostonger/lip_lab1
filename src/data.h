@@ -22,6 +22,7 @@ result data_init_integer(data *dt, int32_t val);
 result data_init_string(data *dt, const char* val);
 result data_init_boolean(data *dt, bool val);
 result data_init_float(data *dt, float val);
+result data_init_any(data *dt, const any_value val, column_type type);
 result set_data(data *dt);
 result delete_saved_row(data *dt);
 void get_integer_from_data(data *dt, int32_t *dest, size_t offset);

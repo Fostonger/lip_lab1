@@ -373,7 +373,7 @@ result ensure_enough_space_table(table *tb, size_t data_size, page_type type) {
             tb->first_page_to_write->next_page = new_pg.value;
             tb->first_page_to_write = new_pg.value;
         } else {
-            if ( !( new_pg = create_page(tb->db, tb, type) ).error )
+            if ( ( new_pg = create_page(tb->db, tb, type) ).error )
                 return new_pg.error;
             if (new_pg.value != NULL) {
                 tb->first_page_to_write->next_page = new_pg.value;

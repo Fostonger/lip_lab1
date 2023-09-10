@@ -5,11 +5,7 @@
 #include <limits.h>
 #include <unistd.h>
 
-#include "table.h"
-#include "database_manager.h"
-#include "util.h"
-#include "data.h"
-#include "data_iterator.h"
+#include "tests.h"
 
 bool int_iterator_func(any_value *value1, any_value *value2) {
     printf("catched int value: %d\n", value2->int_value);
@@ -162,114 +158,71 @@ int main(void) {
     // table *t0 = read_table("merged table", db.value).value;
     // print_table(t0);
 
-    table *t1 = create_table("table1", db.value).value;
-    table *t2 = create_table("table2", db.value).value;
-    add_column(t1, "ints", INT_32);
-    add_column(t1, "bools", BOOL);
-    add_column(t1, "floats", FLOAT);
-    add_column(t1, "strings", STRING);
-    maybe_data data1 = init_data(t1);
-    if (data1.error) {
-        print_if_failure(data1.error);
-        release_table(t1);
-        return 1;
-    }
-    
-    if  (   !print_if_failure( data_init_integer(data1.value, 10) ) 
-        ||  !print_if_failure( data_init_boolean(data1.value, 0) )
-        ||  !print_if_failure( data_init_float(data1.value, 3.1415) )
-        ||  !print_if_failure( data_init_string(data1.value, "string test") ) ) {
+    // maybe_data data_joined = init_data(t0);
+    // if (data_joined.error) {
+    //     print_if_failure(data_joined.error);
+    //     return 1;
+    // }
+    // maybe_data_iterator iterator_joined = init_iterator(t0);
+    // if (iterator_joined.error) return 1;
 
-            release_table(t1);
-            release_data(data1.value);
-            return 1;
-    }
-    if (set_data(data1.value)) {
-        printf("error occured while setting data, maybe target table has different stucture\n");
-    } else {
-        printf("successfully set data!\n");
-    }
-    clear_data(data1.value);
-    
-    if  (   !print_if_failure( data_init_integer(data1.value, 20) ) 
-        ||  !print_if_failure( data_init_boolean(data1.value, 1) )
-        ||  !print_if_failure( data_init_float(data1.value, 7.08) )
-        ||  !print_if_failure( data_init_string(data1.value, lord_of_the_rings_str) ) ) {
+    // // не подсасывает
 
-            release_table(t1);
-            release_data(data1.value);
-            return 1;
-    }
-    if (set_data(data1.value)) {
-        printf("error occured while setting data, maybe target table has different stucture\n");
-    } else {
-        printf("successfully set data!\n");
-    }
-    clear_data(data1.value);
-    
-    if  (   !print_if_failure( data_init_integer(data1.value, 100) ) 
-        ||  !print_if_failure( data_init_boolean(data1.value, 0) )
-        ||  !print_if_failure( data_init_float(data1.value, 15.68) )
-        ||  !print_if_failure( data_init_string(data1.value, "zinger string") ) ) {
+    // copy_data(data_joined.value, iterator_joined.value->cur_data);
+    // set_data(data_joined.value);
 
-            release_table(t1);
-            release_data(data1.value);
-            return 1;
-    }
-    if (set_data(data1.value)) {
-        printf("error occured while setting data, maybe target table has different stucture\n");
-    } else {
-        printf("successfully set data!\n");
-    }
-    clear_data(data1.value);
+    // print_table(t0);
+    // print_if_failure(save_table(db.value, t0));
 
-    maybe_data_iterator iterator = init_iterator(t1);
-    if (iterator.error) return 1;
-    closure print_all = (closure) { .func=int_iterator_func, .value1=0};
-    seek_next_where(iterator.value, INT_32, "ints", print_all);
+    printf("\nStarting Test1: table creation test\n");
+    result test_result = test_table_creation(db.value);
+    printf("\t\t\tTEST1 RESULT\n%s\n", result_to_string(test_result));
 
-    reset_iterator(iterator.value, t1);
-    print_all = (closure) { .func=float_iterator_func, .value1=0};
-    seek_next_where(iterator.value, FLOAT, "floats", print_all);
+    printf("\nStarting Test2: table columns adding test\n");
+    test_result = test_adding_columns(db.value);
+    printf("\t\t\tTEST2 RESULT\n%s\n", result_to_string(test_result));
 
-    reset_iterator(iterator.value, t1);
-    print_all = (closure) { .func=bool_iterator_func, .value1=0};
-    seek_next_where(iterator.value, BOOL, "bools", print_all);
+    printf("\nStarting Test3: table values adding test\n");
+    test_result = test_adding_values(db.value);
+    printf("\t\t\tTEST3 RESULT\n%s\n", result_to_string(test_result));
 
-    reset_iterator(iterator.value, t1);
-    print_all = (closure) { .func=sting_iterator_func, .value1=(any_value){ .string_value="" } };
-    seek_next_where(iterator.value, STRING, "strings", print_all);
+    printf("\nStarting Test4: table values adding speed test\n");
+    test_result = test_adding_values_speed_with_writing_result(db.value);
+    printf("\t\t\tTEST4 RESULT\n%s\n", result_to_string(test_result));
 
-    release_iterator(iterator.value);
+    printf("\nStarting Test5: getting table values speed test\n");
+    test_result = test_getting_values_speed_with_writing_result(db.value);
+    printf("\t\t\tTEST5 RESULT\n%s\n", result_to_string(test_result));
 
-    print_table(t1);
+    // table *t2 = create_table("table2", db.value).value;
 
-    closure delete_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="string test" } };
-    printf("deleted %d rows\n", delete_where(t1, STRING, "strings", delete_closure).count);
 
-    print_table(t1);
+    // closure delete_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="string test" } };
+    // printf("deleted %d rows\n", delete_where(t1, STRING, "strings", delete_closure).count);
 
-    if  (   !print_if_failure( data_init_integer(data1.value, 300) ) 
-        ||  !print_if_failure( data_init_boolean(data1.value, 0) )
-        ||  !print_if_failure( data_init_float(data1.value, 15.68) )
-        ||  !print_if_failure( data_init_string(data1.value, "zinger string updated") ) ) {
+    // print_table(t1);
 
-            release_table(t1);
-            release_data(data1.value);
-            return 1;
-    }
+    // if  (   !print_if_failure( data_init_integer(data1.value, 300) ) 
+    //     ||  !print_if_failure( data_init_boolean(data1.value, 0) )
+    //     ||  !print_if_failure( data_init_float(data1.value, 15.68) )
+    //     ||  !print_if_failure( data_init_string(data1.value, "zinger string updated") ) ) {
 
-    closure update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string" } };
-    printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
+    //         release_table(t1);
+    //         release_data(data1.value);
+    //         return 1;
+    // }
 
-    clear_data(data1.value);
-    print_table(t1);
+    // closure update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string" } };
+    // printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
 
-    printf("second table returned %d\n", work_with_second_table(t2));
+    // clear_data(data1.value);
+    // print_table(t1);
 
-    maybe_table joined_tb = join_table(t1, t2, "ints", INT_32, "merged table");
-    if ( !print_if_failure(joined_tb.error) ) return 1;
-    print_table(joined_tb.value);
+    // printf("second table returned %d\n", work_with_second_table(t2));
+
+    // maybe_table joined_tb = join_table(t1, t2, "ints", INT_32, "merged table");
+    // if ( !print_if_failure(joined_tb.error) ) return 1;
+    // print_table(joined_tb.value);
 
     // maybe_data data_joined = init_data(t0);
     // if (data_joined.error) {
@@ -286,29 +239,29 @@ int main(void) {
 
     // print_table(t1);
 
-    print_if_failure(save_table(db.value, joined_tb.value));
-    print_table(joined_tb.value);
+    // print_if_failure(save_table(db.value, joined_tb.value));
+    // print_table(joined_tb.value);
 
-    print_table(t1);
+    // print_table(t1);
 
-    if  (   !print_if_failure( data_init_integer(data1.value, 300) ) 
-        ||  !print_if_failure( data_init_boolean(data1.value, 0) )
-        ||  !print_if_failure( data_init_float(data1.value, 15.68) )
-        ||  !print_if_failure( data_init_string(data1.value, "zinger string") ) ) {
+    // if  (   !print_if_failure( data_init_integer(data1.value, 300) ) 
+    //     ||  !print_if_failure( data_init_boolean(data1.value, 0) )
+    //     ||  !print_if_failure( data_init_float(data1.value, 15.68) )
+    //     ||  !print_if_failure( data_init_string(data1.value, "zinger string") ) ) {
 
-            release_table(t1);
-            release_data(data1.value);
-            return 1;
-    }
+    //         release_table(t1);
+    //         release_data(data1.value);
+    //         return 1;
+    // }
 
-    update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string updated" } };
-    printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
+    // update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string updated" } };
+    // printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
     
-    release_data(data1.value);
+    // release_data(data1.value);
 
-    print_table(t1);
+    // print_table(t1);
 
-    release_table(t1);
+    // release_table(t1);
 
     fclose(dbfile);
 }

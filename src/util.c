@@ -12,11 +12,17 @@ static const char *const result_descriptions[] = {
     [WRITE_ERROR] = "ERROR: Error occured while trying to write to database file",
     [READ_ERROR] = "ERROR: Error occured while trying to read database file",
     [DIFFERENT_DB] = "ERROR: the action you trying to perform meant to be inside single database, not with several of them!",
-    [INVALID_PAGE_NUMBER] = "ERROR: Before you move page, its number has to be first to write. Rearrange pages"
+    [INVALID_PAGE_NUMBER] = "ERROR: Before you move page, its number has to be first to write. Rearrange pages",
+    [NOT_EQUAL] = "ERROR: Tests shown that values that should be equal are in fact not",
+    [NOT_FOUND] = "ERROR: Tests shown that value that should be in table are missing"
 };
 
 int8_t print_if_failure( result result ) {
     if (!result) return 1;
     printf("-->%s\n", result_descriptions[result]);
     return 0;
+}
+
+const char *result_to_string(result rslt) {
+    return result_descriptions[rslt];
 }

@@ -37,6 +37,7 @@ maybe_data init_data(table *tb) {
 }
 
 void release_data(data *dt) {
+    if (dt == NULL) return;
     free(dt->bytes);
     free(dt);
 }
