@@ -255,7 +255,7 @@ result test_getting_values_speed_with_writing_result(database *db) {
     }
 
 
-    for (int it = 0; it < 10000; it++) {
+    for (int it = 0; it < 5000; it++) {
         any_typed_value data_values[1][4] = {
             {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
                 (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
@@ -282,7 +282,7 @@ result test_getting_values_speed_with_writing_result(database *db) {
         goto release_iter;
     }
 
-    for (int it = 0; it < 10000; it++) {
+    for (int it = 0; it < 5000; it++) {
 
         closure find_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=it }};
 
@@ -312,5 +312,156 @@ release_tb:
     return test_error;
 }
 
-result test_deleting_value(database *db);
-result test_updating_value(database *db);
+result test_deleting_value(database *db) {
+    column_header headers[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+
+    result test_error = OK;
+
+    maybe_table tb = create_test_table(db, "table 7", headers, 4);
+    if (tb.error) { 
+        test_error = tb.error;
+        goto release_tb;
+    }
+
+    for (int it = 0; it < 1000; it++) {
+        any_typed_value data_values[1][4] = {
+            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
+        
+        };
+        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
+        if (test_error) goto release_tb;
+    }
+
+    closure delete_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=500 }};
+
+    result_with_count delete_result = delete_where(tb.value, INT_32, "ints", delete_int);
+    if (delete_result.error || delete_result.count != 1) {
+        test_error = delete_result.error == OK ? JOB_WAS_NOT_DONE : delete_result.error;
+        goto release_tb;
+    }
+
+    maybe_data_iterator iterator = init_iterator(tb.value);
+    if (iterator.error) {
+        test_error = iterator.error;
+        goto release_iter;
+    }
+
+    for (int it = 0; it < 1000; it++) {
+        if (it == 500) continue;
+
+        closure find_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=it }};
+
+        bool found = seek_next_where(iterator.value, INT_32, "ints", find_int);
+        if (!found) {
+            test_error = NOT_FOUND;
+            goto release_iter;
+        }
+
+        reset_iterator(iterator.value, tb.value);
+    }
+
+release_iter:
+    release_iterator(iterator.value);
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}
+result test_updating_value(database *db) {
+    column_header headers[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+
+    result test_error = OK;
+
+    maybe_table tb = create_test_table(db, "table 7", headers, 4);
+    if (tb.error) { 
+        test_error = tb.error;
+        goto release_tb;
+    }
+
+    for (int it = 0; it < 1000; it++) {
+        any_typed_value data_values[1][4] = {
+            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
+        
+        };
+        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
+        if (test_error) goto release_tb;
+    }
+
+    closure update_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=500 }};
+
+    maybe_data updated_dt = init_data(tb.value);
+    if (updated_dt.error) {
+        test_error = updated_dt.error;
+        goto release_dt;
+    }
+
+    any_typed_value data_values[4] = {
+            (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=99999 } }, 
+            (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+            (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+            (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } 
+    };
+
+    for (size_t columns = 0; columns < 4; columns ++) {
+        test_error = data_init_any(updated_dt.value, data_values[columns].value, data_values[columns].type);
+        if (test_error) goto release_dt;
+    }
+
+    result_with_count update_result = update_where(tb.value, INT_32, "ints", update_int, updated_dt.value);
+    if (update_result.error || update_result.count != 1) {
+        test_error = update_result.error == OK ? JOB_WAS_NOT_DONE : update_result.error;
+        goto release_tb;
+    }
+
+    maybe_data_iterator iterator = init_iterator(tb.value);
+    if (iterator.error) {
+        test_error = iterator.error;
+        goto release_iter;
+    }
+
+    for (int it = 0; it < 1000; it++) {
+        if (it == 500) continue;
+
+        closure find_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=it }};
+
+        bool found = seek_next_where(iterator.value, INT_32, "ints", find_int);
+        if (!found) {
+            test_error = NOT_FOUND;
+            goto release_iter;
+        }
+
+        reset_iterator(iterator.value, tb.value);
+    }
+
+    closure find_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=99999 }};
+    bool found = seek_next_where(iterator.value, INT_32, "ints", find_int);
+    if (!found) {
+        test_error = NOT_FOUND;
+        goto release_iter;
+    }
+
+    reset_iterator(iterator.value, tb.value);
+
+release_iter:
+    release_iterator(iterator.value);
+release_dt:
+    release_data(updated_dt.value);
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}

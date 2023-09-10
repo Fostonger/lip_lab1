@@ -13,7 +13,8 @@ typedef enum {
     DIFFERENT_DB,
     INVALID_PAGE_NUMBER,
     NOT_EQUAL,
-    NOT_FOUND
+    NOT_FOUND,
+    JOB_WAS_NOT_DONE
 } result;
 
 typedef struct {

@@ -174,25 +174,33 @@ int main(void) {
     // print_table(t0);
     // print_if_failure(save_table(db.value, t0));
 
-    printf("\nStarting Test1: table creation test\n");
+    printf("\n\tStarting Test1: table creation test\n");
     result test_result = test_table_creation(db.value);
     printf("\t\t\tTEST1 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\nStarting Test2: table columns adding test\n");
+    printf("\n\tStarting Test2: table columns adding test\n");
     test_result = test_adding_columns(db.value);
     printf("\t\t\tTEST2 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\nStarting Test3: table values adding test\n");
+    printf("\n\tStarting Test3: table values adding test\n");
     test_result = test_adding_values(db.value);
     printf("\t\t\tTEST3 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\nStarting Test4: table values adding speed test\n");
+    printf("\n\tStarting Test4: table values adding speed test with charts printed\n");
     test_result = test_adding_values_speed_with_writing_result(db.value);
     printf("\t\t\tTEST4 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\nStarting Test5: getting table values speed test\n");
+    printf("\n\tStarting Test5: getting table values speed test with charts printed\n");
     test_result = test_getting_values_speed_with_writing_result(db.value);
     printf("\t\t\tTEST5 RESULT\n%s\n", result_to_string(test_result));
+
+    printf("\n\tStarting Test6: deleting table values test\n");
+    test_result = test_deleting_value(db.value);
+    printf("\t\t\tTEST6 RESULT\n%s\n", result_to_string(test_result));
+
+    printf("\n\tStarting Test7: updating table values test\n");
+    test_result = test_updating_value(db.value);
+    printf("\t\t\tTEST7 RESULT\n%s\n", result_to_string(test_result));
 
     // table *t2 = create_table("table2", db.value).value;
 
