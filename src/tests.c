@@ -31,6 +31,7 @@ void make_image_from_csv(const char *path_to_csv) {
     strcpy(final_str + strlen(init_str) + strlen(path_to_csv), str_end);
 
     system(final_str);
+    free(final_str);
 }
 
 maybe_table create_test_table(database *db, const char *name, column_header *headers, size_t headers_count) {
@@ -111,6 +112,20 @@ bool values_iterator(any_value *value1, any_value *value2) {
 
 bool simple_ints_search_predicate(any_value *value1, any_value *value2) {
     return value1->int_value == value2->int_value;
+}
+
+bool any_typed_value_search(any_value *value1, any_value *value2) {
+    any_typed_value *real_value = (any_typed_value *)value1->string_value;
+    switch (real_value->type) {
+        case STRING:
+            return !strcmp(real_value->value.string_value, value2->string_value);
+        case INT_32:
+            return real_value->value.int_value == value2->int_value;
+        case FLOAT:
+            return real_value->value.float_value == value2->float_value;
+        case BOOL:
+            return real_value->value.bool_value == value2->bool_value;
+    }
 }
 
 result test_adding_values(database *db) {
@@ -455,12 +470,175 @@ result test_updating_value(database *db) {
         goto release_iter;
     }
 
-    reset_iterator(iterator.value, tb.value);
-
 release_iter:
     release_iterator(iterator.value);
 release_dt:
     release_data(updated_dt.value);
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}
+
+result test_tables_merging(database *db) {
+    result test_error = OK;
+    column_header headers_1[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+    column_header headers_2[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools on second"},
+        (column_header) { .type=FLOAT, .name="floats on second"},
+        (column_header) { .type=STRING, .name="strings on second"}
+    };
+
+    column_header headers_joined[7] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"},
+        (column_header) { .type=BOOL, .name="bools on second"},
+        (column_header) { .type=FLOAT, .name="floats on second"},
+        (column_header) { .type=STRING, .name="strings on second"}
+    };
+
+    maybe_table tb1 = create_test_table(db, "table 8", headers_1, 4);
+    if (tb1.error) { 
+        test_error = tb1.error;
+        goto release_tb_1;
+    }
+    maybe_table tb2 = create_test_table(db, "table 9", headers_2, 4);
+    if (tb2.error) { 
+        test_error = tb2.error;
+        goto release_tb_2;
+    }
+
+    for (int it = 0; it < 10; it++) {
+        any_typed_value data_values[1][4] = {
+            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
+        
+        };
+        test_error = fill_table_with_data(db, tb1.value, 4, 1, data_values);
+        if (test_error) goto release_tb_2;
+        test_error = fill_table_with_data(db, tb2.value, 4, 1, data_values);
+        if (test_error) goto release_tb_2;
+    }
+
+    maybe_table joined_tb = join_table(tb1.value, tb2.value, "ints", INT_32, "merged table");
+    if ( (test_error = joined_tb.error) ) goto release_tb_joined;
+
+    for ( size_t it = 0; it < 7; it++) {
+        if (joined_tb.value->header->columns[it].type != headers_joined[it].type || strcmp(joined_tb.value->header->columns[it].name, headers_joined[it].name) ) {
+            test_error = JOB_WAS_NOT_DONE;
+            goto release_tb_joined;
+        }
+    }
+
+    maybe_data_iterator iterator = init_iterator(joined_tb.value);
+    if (iterator.error) {
+        test_error = iterator.error;
+        goto release_iter;
+    }
+
+    for (int it = 0; it < 10; it++) {
+        any_typed_value data_values[1][7] = {
+            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} }
+            }
+        
+        };
+        for (size_t column = 0; column < 7; column++) {
+            closure find_predic = (closure) { .func=any_typed_value_search, .value1=(any_value) { .string_value=(char *)&(data_values[0][column]) }};
+
+            bool found = seek_next_where(iterator.value, headers_joined[column].type, headers_joined[column].name, find_predic);
+            if (!found) {
+                test_error = NOT_FOUND;
+                goto release_iter;
+            }
+
+            reset_iterator(iterator.value, joined_tb.value);
+        }
+    }
+
+release_iter:
+    release_iterator(iterator.value);
+release_tb_joined:
+    release_table(joined_tb.value);
+release_tb_2:
+    release_table(tb2.value);
+release_tb_1:
+    release_table(tb1.value);
+    return test_error;
+}
+
+bool filter_table_greater(any_value *value1, any_value *value2) {
+    return value1->int_value < value2->int_value;
+}
+
+result test_table_filtering(database *db) {
+    result test_error = OK;
+    column_header headers_1[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+
+    maybe_table tb = create_test_table(db, "table 10", headers_1, 4);
+    if (tb.error) { 
+        test_error = tb.error;
+        goto release_tb;
+    }
+    for (int it = 0; it < 10; it++) {
+        any_typed_value data_values[1][4] = {
+            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
+        
+        };
+        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
+        if (test_error) goto release_tb;
+    }
+
+
+    closure filter_preic = (closure) { .func=filter_table_greater, .value1=(any_value) { .int_value=5 }};
+    maybe_table filtered_tb = filter_table(tb.value, INT_32, "ints", filter_preic);
+    if ( (test_error = filtered_tb.error) ) goto release_tb_joined;
+
+    maybe_data_iterator iterator = init_iterator(filtered_tb.value);
+    if (iterator.error) {
+        test_error = iterator.error;
+        goto release_iter;
+    }
+
+    for (int it = 0; it < 10; it++) {
+        closure find_predic = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=it }};
+
+        bool found = seek_next_where(iterator.value, INT_32, "ints", find_predic);
+        if (found != ( it > 5 ) ) {
+            test_error = JOB_WAS_NOT_DONE;
+            goto release_iter;
+        }
+
+        reset_iterator(iterator.value, filtered_tb.value);
+
+    }
+
+release_iter:
+    release_iterator(iterator.value);
+release_tb_joined:
+    release_table(filtered_tb.value);
 release_tb:
     release_table(tb.value);
     return test_error;

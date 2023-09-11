@@ -202,29 +202,13 @@ int main(void) {
     test_result = test_updating_value(db.value);
     printf("\t\t\tTEST7 RESULT\n%s\n", result_to_string(test_result));
 
-    // table *t2 = create_table("table2", db.value).value;
+    printf("\n\tStarting Test8: tables joining test\n");
+    test_result = test_tables_merging(db.value);
+    printf("\t\t\tTEST8 RESULT\n%s\n", result_to_string(test_result));
 
-
-    // closure delete_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="string test" } };
-    // printf("deleted %d rows\n", delete_where(t1, STRING, "strings", delete_closure).count);
-
-    // print_table(t1);
-
-    // if  (   !print_if_failure( data_init_integer(data1.value, 300) ) 
-    //     ||  !print_if_failure( data_init_boolean(data1.value, 0) )
-    //     ||  !print_if_failure( data_init_float(data1.value, 15.68) )
-    //     ||  !print_if_failure( data_init_string(data1.value, "zinger string updated") ) ) {
-
-    //         release_table(t1);
-    //         release_data(data1.value);
-    //         return 1;
-    // }
-
-    // closure update_closure = (closure) { .func=string_modify_func, .value1=(any_value){ .string_value="zinger string" } };
-    // printf("updated %d rows\n", update_where(t1, STRING, "strings", update_closure, data1.value).count);
-
-    // clear_data(data1.value);
-    // print_table(t1);
+    printf("\n\tStarting Test9: table filteringing test\n");
+    test_result = test_table_filtering(db.value);
+    printf("\t\t\tTEST9 RESULT\n%s\n", result_to_string(test_result));
 
     // printf("second table returned %d\n", work_with_second_table(t2));
 
