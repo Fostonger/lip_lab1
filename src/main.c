@@ -174,41 +174,49 @@ int main(void) {
     // print_table(t0);
     // print_if_failure(save_table(db.value, t0));
 
-    printf("\n\tStarting Test1: table creation test\n");
+    printf("\n\tStarting Test 1: table creation test\n");
     result test_result = test_table_creation(db.value);
-    printf("\t\t\tTEST1 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 1 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test2: table columns adding test\n");
+    printf("\n\tStarting Test 2: table columns adding test\n");
     test_result = test_adding_columns(db.value);
-    printf("\t\t\tTEST2 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 2 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test3: table values adding test\n");
+    printf("\n\tStarting Test 3: table values adding test\n");
     test_result = test_adding_values(db.value);
-    printf("\t\t\tTEST3 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 3 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test4: table values adding speed test with charts printed\n");
+    printf("\n\tStarting Test 4: table values adding speed test with charts printed\n");
     test_result = test_adding_values_speed_with_writing_result(db.value);
-    printf("\t\t\tTEST4 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 4 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test5: getting table values speed test with charts printed\n");
+    printf("\n\tStarting Test 5: getting table values speed test with charts printed\n");
     test_result = test_getting_values_speed_with_writing_result(db.value);
-    printf("\t\t\tTEST5 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 5 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test6: deleting table values test\n");
+    printf("\n\tStarting Test 6: deleting table values test\n");
     test_result = test_deleting_value(db.value);
-    printf("\t\t\tTEST6 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 6 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test7: updating table values test\n");
+    printf("\n\tStarting Test 7: updating table values test\n");
     test_result = test_updating_value(db.value);
-    printf("\t\t\tTEST7 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 7 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test8: tables joining test\n");
+    printf("\n\tStarting Test 8: tables joining test\n");
     test_result = test_tables_merging(db.value);
-    printf("\t\t\tTEST8 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 8 RESULT\n%s\n", result_to_string(test_result));
 
-    printf("\n\tStarting Test9: table filteringing test\n");
+    printf("\n\tStarting Test 9: table filteringing test\n");
     test_result = test_table_filtering(db.value);
-    printf("\t\t\tTEST9 RESULT\n%s\n", result_to_string(test_result));
+    printf("\t\t\tTEST 9 RESULT\n%s\n", result_to_string(test_result));
+
+    printf("\n\tStarting Test 10: table saving test\n");
+    test_result = test_table_saving(db.value);
+    printf("\t\t\tTEST 10 RESULT\n%s\n", result_to_string(test_result));
+
+    printf("\n\tStarting Test 11: table reading test\n");
+    test_result = test_table_reading(db.value);
+    printf("\t\t\tTEST 11 RESULT\n%s\n", result_to_string(test_result));
 
     // printf("second table returned %d\n", work_with_second_table(t2));
 

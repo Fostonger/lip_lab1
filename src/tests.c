@@ -632,13 +632,80 @@ result test_table_filtering(database *db) {
         }
 
         reset_iterator(iterator.value, filtered_tb.value);
-
     }
 
 release_iter:
     release_iterator(iterator.value);
 release_tb_joined:
     release_table(filtered_tb.value);
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}
+
+result test_table_saving(database *db) {
+    column_header headers[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+
+    result test_error = OK;
+
+    maybe_table tb = create_test_table(db, "table to save", headers, 4);
+    if (tb.error) { 
+        test_error = tb.error;
+        goto release_tb;
+    }
+
+    for (int it = 0; it < 500; it++) {
+        any_typed_value data_values[1][4] = {
+            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
+        
+        };
+        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
+        if (test_error) {
+            goto release_tb;
+        }
+    }
+
+    test_error = save_table(db, tb.value);
+
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}
+
+result test_table_reading(database *db) {
+    result test_error = OK;
+
+    maybe_table tb = read_table("table to save", db);
+    if ( (test_error = tb.error) ) goto release_tb;
+
+    maybe_data_iterator iterator = init_iterator(tb.value);
+    if (iterator.error) {
+        test_error = iterator.error;
+        goto release_iter;
+    }
+
+    for (int it = 0; it < 500; it++) {
+        closure find_predic = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=it }};
+
+        bool found = seek_next_where(iterator.value, INT_32, "ints", find_predic);
+        if (!found) {
+            test_error = NOT_FOUND;
+            goto release_iter;
+        }
+
+        reset_iterator(iterator.value, tb.value);
+    }
+
+release_iter:
+    release_iterator(iterator.value);
 release_tb:
     release_table(tb.value);
     return test_error;
