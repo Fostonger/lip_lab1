@@ -83,7 +83,7 @@ bool get_table_by_name(any_value val1, page_header *header) {
 }
 
 maybe_table read_table(const char *tablename, database *db) {
-    database_closure predicate = (database_closure) { .func=get_table_by_name, .value1=tablename };
+    database_closure predicate = (database_closure) { .func=get_table_by_name, .value1=(any_value) { .string_value=(char *)tablename } };
     maybe_page pg_with_table = find_page(db, predicate);
     if (pg_with_table.error) return (maybe_table) { .error= pg_with_table.error, .value=NULL };
 
