@@ -48,7 +48,6 @@ struct database {
     database_header *header;
     page *first_loaded_page;
     page **all_loaded_pages;
-    size_t loaded_pages_count;
     size_t loaded_pages_capacity;
 };
 
@@ -70,7 +69,7 @@ maybe_page get_page_header(database *db, table *tb, size_t page_number);
 result read_page_data(database *db, page *pg_to_read);
 maybe_page find_page(database *db, database_closure predicate);
 page *rearrange_page_order(page *pg_to_save);
-maybe_page get_page_by_number(database *db, uint64_t page_ordinal);
+maybe_page get_page_by_number(database *db, table *tb, uint64_t page_ordinal);
 maybe_page get_suitable_page(table *tb, size_t data_size, page_type type);
 result ensure_enough_space_table(table *tb, size_t data_size, page_type type);
 result write_page(page *pg);

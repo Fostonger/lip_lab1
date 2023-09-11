@@ -12,7 +12,7 @@ bool has_next(data_iterator *iter) {
     page *cur_page = iter->cur_page;
     char *cur_data = iter->cur_data->bytes;
 
-    return has_next_data_on_page(cur_page, cur_data) || cur_page->next_page != NULL;
+    return has_next_data_on_page(cur_page, cur_data) || cur_page->pgheader->next_page_number != 0;
 }
 
 void get_next(data_iterator *iter) {
@@ -27,7 +27,9 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
     
     while (has_next(iter)) {
         if (iter->cur_data->bytes - (char *)iter->cur_page->data > PAGE_SIZE) {
-            iter->cur_page = iter->cur_page->next_page;
+            maybe_page next_page = get_page_by_number(iter->tb->db, iter->tb, iter->cur_page->pgheader->next_page_number);
+            iter->cur_page->next_page = next_page.value;
+            iter->cur_page = next_page.value;
             iter->cur_data->bytes = iter->cur_page->data;
         }
 
@@ -242,8 +244,6 @@ maybe_table filter_table(table*tb, column_type type, const char *column_name, cl
         new_tb = (maybe_table) { .error=filtered_data.error, .value=NULL };
         goto filtered_data_release;
     }
-
-    size_t offset_to_column1 = offset_to_column(tb->header, column_name, type);
 
     while (seek_next_where(iterator.value, type, column_name, clr)) {
         result copy_error = copy_data(filtered_data.value, iterator.value->cur_data);

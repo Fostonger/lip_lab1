@@ -28,7 +28,10 @@ maybe_table create_table(const char *tablename, database *db) {
     strcpy(header->name, tablename);
 
     table *tb = malloc(sizeof(table));
-    if (tb == NULL) return (maybe_table) { .error=MALLOC_ERROR };
+    if (tb == NULL) {
+        free(header);
+        return (maybe_table) { .error=MALLOC_ERROR };
+    }
 
     tb->header = header;
     tb->db = db;
@@ -87,12 +90,12 @@ maybe_table read_table(const char *tablename, database *db) {
     maybe_table tb = create_table(tablename, db);
     if (tb.error) return tb;
 
-    tb.value->header = &(pg_with_table.value->pgheader->table_header);
+    *(tb.value->header) = pg_with_table.value->pgheader->table_header;
     tb.value->db = db;
     tb.value->first_page = pg_with_table.value;
     tb.value->first_page_to_write = pg_with_table.value;
     if (tb.value->header->first_string_page_num != 0) {
-        maybe_page first_string_page = get_page_by_number(tb.value->db, tb.value->header->first_string_page_num);
+        maybe_page first_string_page = get_page_by_number(tb.value->db, tb.value, tb.value->header->first_string_page_num);
         if (first_string_page.error) {
             release_table(tb.value);
             return (maybe_table) { .error=first_string_page.error, .value=NULL };

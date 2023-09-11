@@ -64,7 +64,6 @@ maybe_database read_db(FILE *file) {
         return (maybe_database){ .error=read_error, .value=NULL };
     }
     db.value->header->first_free_page = db.value->header->next_page_to_save_number;
-    db.value->loaded_pages_count = db.value->header->first_free_page - 1;
     db.value->loaded_pages_capacity = 100;
     return db;
 }
@@ -76,15 +75,15 @@ maybe_database initdb(FILE *file, bool overwrite) {
 
 void expand_loaded_pages_memory(database *db) {
     page **new_pages_storage = (page **)malloc(sizeof(page *) * (db->loaded_pages_capacity + 100));
+    memcpy(new_pages_storage, db->all_loaded_pages, sizeof(page *) * db->loaded_pages_capacity);
     db->loaded_pages_capacity += 100;
-    memcpy(new_pages_storage, db->all_loaded_pages, sizeof(page *) * db->loaded_pages_count);
     free(db->all_loaded_pages);
     db->all_loaded_pages = new_pages_storage;
 }
 
 uint16_t get_page_number(database *db, page *pg) {
     uint16_t page_num = db->header->first_free_page++;
-    if (db->loaded_pages_count == db->loaded_pages_capacity)
+    while (page_num >= db->loaded_pages_capacity) // первый указатель в all_loaded_pages не используется
         expand_loaded_pages_memory(db);
     db->all_loaded_pages[page_num] = pg;
     return page_num;
@@ -145,7 +144,8 @@ maybe_page create_empty_page_with_header(page_header *header, table *tb) {
 }
 
 maybe_page read_page_header(database *db, table *tb, uint16_t page_ordinal) {
-    if (page_ordinal == 0) return (maybe_page){.error=DONT_EXIST, .value=NULL };
+    if (page_ordinal == 0 || page_ordinal >= db->header->next_page_to_save_number) 
+        return (maybe_page){.error=DONT_EXIST, .value=NULL };
 
     size_t page_offset = count_offset_to_page_header(db, page_ordinal);
     fseek(db->file, page_offset, SEEK_SET);
@@ -203,7 +203,7 @@ maybe_page get_page_header(database *db, table *tb, size_t page_number) {
     } else {
         maybe_page read_page = read_page_header(db, tb, page_number);
         if (read_page.error) return read_page;
-        if (db->loaded_pages_count == db->loaded_pages_capacity)
+        while (read_page.value->pgheader->page_number > db->loaded_pages_capacity)
             expand_loaded_pages_memory(db);
         db->all_loaded_pages[page_number] = read_page.value;
         return read_page;
@@ -253,6 +253,7 @@ maybe_page create_page(database *db, table *tb, page_type type) {
     pg->tb = tb;
     pg->data = malloc (PAGE_SIZE);
     if (pg->data == NULL) return (maybe_page) { .error=MALLOC_ERROR, .value = NULL };
+    pg->next_page = NULL;
 
     return (maybe_page) { .error=OK, .value=pg };
 }
@@ -329,14 +330,14 @@ maybe_page get_next_page_or_load(page *pg) {
     return (maybe_page) { .error=DONT_EXIST, .value=NULL };
 }
 
-maybe_page get_page_by_number(database *db, uint64_t page_ordinal) {
+maybe_page get_page_by_number(database *db, table *tb, uint64_t page_ordinal) {
     if (page_ordinal == 0) 
         return (maybe_page) { .error=DONT_EXIST, .value=NULL };
     while (page_ordinal > db->loaded_pages_capacity) {
         expand_loaded_pages_memory(db);
     }
     if ( db->all_loaded_pages[page_ordinal] == NULL ) {
-        maybe_page read_page = read_page_header(db, NULL, page_ordinal);
+        maybe_page read_page = read_page_header(db, tb, page_ordinal);
         if (read_page.error) return read_page;
 
         result read_page_data_error = read_page_data(db, read_page.value);
@@ -377,6 +378,7 @@ result ensure_enough_space_table(table *tb, size_t data_size, page_type type) {
                 return new_pg.error;
             if (new_pg.value != NULL) {
                 tb->first_page_to_write->next_page = new_pg.value;
+                tb->first_page_to_write->pgheader->next_page_number = new_pg.value->pgheader->page_number;
                 tb->first_page_to_write = new_pg.value;
                 new_pg.value->pgheader->data_offset = 0;
             }
@@ -391,6 +393,7 @@ void release_page(page *pg) {
     page *prev_page = cur_page;
     while (cur_page != NULL) {
         free(cur_page->data);
+        cur_page->tb->db->all_loaded_pages[cur_page->pgheader->page_number] = NULL;
         free(cur_page->pgheader);
         prev_page = cur_page;
         cur_page = cur_page->next_page;
