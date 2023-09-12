@@ -17,10 +17,10 @@ def save_chart(fig, chart_name):
     img = fig2img(fig)
     img.save(chart_name + ".png")
 
-def create_chart(chart_name, iteration, time_taken) -> Any:
+def create_chart(chart_name, iteration, time_taken, x_label, y_label) -> Any:
     plt.title(chart_name)
-    plt.xlabel('Iterations')
-    plt.ylabel("Time taken")
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
     plt.plot(iteration, time_taken)
 
     return plt.gcf()
@@ -28,16 +28,20 @@ def create_chart(chart_name, iteration, time_taken) -> Any:
 def read_csv_data(chart_filename, outputfile_dir):
     iteration = []
     time_taken = []
+    x_label = ''
+    y_label = ''
     with open(chart_filename, newline='') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=',', quotechar='|')
-        next(spamreader)
+        header = next(spamreader)
+        x_label = header[0]
+        y_label = header[1]
         for row in spamreader:
             iteration.append(int(row[0]))
             time_taken.append(float(row[1]))
 
     chart_filename_without_csv = chart_filename.split(".")[0].split('/')[-1]
     chart_name = ' '.join(chart_filename_without_csv.split("_"))
-    fig = create_chart(chart_name, iteration, time_taken)
+    fig = create_chart(chart_name, iteration, time_taken, x_label, y_label)
 
     save_chart(fig, outputfile_dir + chart_filename_without_csv)
 

@@ -228,6 +228,14 @@ int main(void) {
     test_result = test_multipaged_strings_reading(db.value);
     printf("\t\t\tTEST 14 RESULT\n%s\n", result_to_string(test_result));
 
+    printf("\n\tStarting Test 15: deleting elements speed test with chart creation\n");
+    test_result = test_deleting_values_speed_with_writing_result(db.value);
+    printf("\t\t\tTEST 15 RESULT\n%s\n", result_to_string(test_result));
+
+    printf("\n\tStarting Test 16: updating elements speed test with chart creation\n");
+    test_result = test_updating_values_speed_with_writing_result(db.value);
+    printf("\t\t\tTEST 16 RESULT\n%s\n", result_to_string(test_result));
+
     // printf("second table returned %d\n", work_with_second_table(t2));
 
     // maybe_table joined_tb = join_table(t1, t2, "ints", INT_32, "merged table");

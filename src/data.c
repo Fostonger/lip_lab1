@@ -262,7 +262,7 @@ void make_string_disabled(page *page_string, uint16_t offset) {
 }
 
 bool has_next_data_on_page(page *cur_page, char *cur_data) {
-    return cur_data - (char *)cur_page->data < PAGE_SIZE 
+    return cur_data - (char *)cur_page->data < cur_page->pgheader->data_offset 
             && ( cur_data - (char *)cur_page->data ) / cur_page->tb->header->row_size < 
                 cur_page->pgheader->data_offset / cur_page->tb->header->row_size;
 }
@@ -282,7 +282,7 @@ result delete_strings_from_row(data *dt) {
     return OK;
 }
 
-void sync_storage_by_table(data *dt, size_t bytes_moved) {
+void sync_storage_by_table(data *dt, size_t new_offset, size_t new_pg_num) {
     for (size_t column_index = 0; column_index < dt->table->header->column_amount; column_index++) {
         column_header header = dt->table->header->columns[column_index];
         if (header.type != STRING) continue;
@@ -293,27 +293,45 @@ void sync_storage_by_table(data *dt, size_t bytes_moved) {
         maybe_page page_with_string = get_page_by_number(dt->table->db, dt->table, string_ref->string_page_number);
         string_in_storage *cur_string_data = (string_in_storage *)(page_with_string.value->data + string_ref->offset);
 
-        cur_string_data->link_to_current.offset -= bytes_moved;
+        cur_string_data->link_to_current.offset = new_offset;
+        cur_string_data->link_to_current.string_page_number = new_pg_num;
     }
 }
 
-result delete_saved_row(data *dt) {
+result delete_saved_row(data *dt, page *pg) {
     result delete_string_result = delete_strings_from_row(dt);
     if (delete_string_result) return delete_string_result;
-    dt->table->first_page_to_write->pgheader->data_offset -= dt->size;
+    if (dt->table->first_page_to_write->pgheader->data_offset == 0) {
+        if (dt->table->first_page->pgheader->next_page_number == 0 ) return DONT_EXIST;
+        size_t last_suitable_pg_num = dt->table->first_page->pgheader->data_offset == 0 ? 0 : dt->table->first_page->pgheader->page_number;
+        maybe_page new_page_to_write = get_page_by_number( dt->table->db, dt->table, dt->table->first_page->pgheader->page_number);
+        while ( !new_page_to_write.error && new_page_to_write.value->pgheader->next_page_number != 0) {
+            new_page_to_write = get_page_by_number( dt->table->db, dt->table, new_page_to_write.value->pgheader->next_page_number);
+            if (new_page_to_write.error) return new_page_to_write.error;
+            if (new_page_to_write.value->pgheader->data_offset > dt->size) {
+                last_suitable_pg_num = new_page_to_write.value->pgheader->page_number;
+            }
+        }
+        new_page_to_write = get_page_by_number( dt->table->db, dt->table, last_suitable_pg_num);
+        if (new_page_to_write.error) return new_page_to_write.error;
+        dt->table->first_page_to_write = new_page_to_write.value;
+    }
 
+    dt->table->first_page_to_write->pgheader->data_offset -= dt->size;
     void *data_ptr = dt->bytes;
     void *table_ptr = dt->table->first_page_to_write->data
                             + dt->table->first_page_to_write->pgheader->data_offset;
-    if (data_ptr != table_ptr) memcpy(data_ptr, table_ptr, dt->size);
 
-    sync_storage_by_table(dt, table_ptr - data_ptr);
+    if (data_ptr != table_ptr) {
+        memcpy(data_ptr, table_ptr, dt->size);
+        sync_storage_by_table(dt, data_ptr - pg->data, pg->pgheader->page_number);
+    }
 
     return OK;
 }
 
-void update_string_data_for_row(data *dst, data *src) {
-    delete_saved_row(dst);
+void update_string_data_for_row(data *dst, page *dst_pg, data *src) {
+    delete_saved_row(dst, dst_pg);
     set_data(src);
 }
 

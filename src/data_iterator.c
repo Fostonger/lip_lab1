@@ -16,7 +16,7 @@ bool has_next(data_iterator *iter) {
 }
 
 void get_next(data_iterator *iter) {
-    iter->cur_data->bytes = iter->cur_data->bytes + iter->tb->header->row_size;
+    iter->cur_data->bytes += iter->tb->header->row_size;
 }
 
 bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, closure clr) {
@@ -26,7 +26,9 @@ bool seek_next_where(data_iterator *iter, column_type type, const char *column_n
     size_t offset = offset_to_column(iter->tb->header, column_name, type);
     
     while (has_next(iter)) {
-        if (iter->cur_data->bytes - (char *)iter->cur_page->data > PAGE_SIZE) {
+        while (iter->cur_data->bytes - (char *)iter->cur_page->data >= iter->cur_page->pgheader->data_offset) {
+            if (iter->cur_page->pgheader->next_page_number == 0) return false;
+            
             maybe_page next_page = get_page_by_number(iter->tb->db, iter->tb, iter->cur_page->pgheader->next_page_number);
             iter->cur_page->next_page = next_page.value;
             iter->cur_page = next_page.value;
@@ -52,7 +54,7 @@ result_with_count update_where(table* tb, column_type type, const char *column_n
     int16_t update_count = 0;
     while (seek_next_where(iterator.value, type, column_name, clr)) {
         data *data_to_update = iterator.value->cur_data;
-        update_string_data_for_row(data_to_update, update_val);
+        update_string_data_for_row(data_to_update, iterator.value->cur_page, update_val);
         update_count++;
     }
 
@@ -79,7 +81,11 @@ result_with_count delete_where(table *tb, column_type type, const char *column_n
     int16_t delete_count = 0;
     while (seek_next_where(iterator.value, type, column_name, clr)) {
         data *data_to_delete = iterator.value->cur_data;
-        delete_saved_row(data_to_delete);
+        result delete_error = delete_saved_row(data_to_delete, iterator.value->cur_page);
+        if (delete_error) {
+            release_iterator(iterator.value);
+            return (result_with_count) { .error=delete_error, .count=0 };
+        }
         delete_count++;
     }
 

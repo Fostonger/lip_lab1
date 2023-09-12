@@ -68,6 +68,22 @@ release_dt:
     return filling_error;
 }
 
+result fill_with_test_data(database *db, table *tb, int32_t int_start, int32_t int_end) {
+    result fill_error = OK;
+    for (int32_t it = int_start; it < int_end; it++) {
+        any_typed_value data_values[1][4] = {
+            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
+        
+        };
+        fill_error = fill_table_with_data(db, tb, 4, 1, data_values);
+        if (fill_error) return fill_error;
+    }
+    return fill_error;
+}
+
 result test_adding_columns(database *db) {
     column_header headers[4] = {
         (column_header) { .type=INT_32, .name="ints"},
@@ -233,6 +249,8 @@ result test_adding_values_speed_with_writing_result(database *db) {
 
     FILE *timestamp_file = fopen(charts_data_file, "wb");
 
+    if (timestamp_file != NULL) fprintf(timestamp_file, "values added count, Time taken\n");
+
     for (int it = 0; it < 1000; it++) {
         clock_t t = clock();
         test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
@@ -270,17 +288,8 @@ result test_getting_values_speed_with_writing_result(database *db) {
     }
 
 
-    for (int it = 0; it < 5000; it++) {
-        any_typed_value data_values[1][4] = {
-            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
-                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
-                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
-                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
-        
-        };
-        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
-        if (test_error) goto release_tb;
-    }
+    test_error = fill_with_test_data(db, tb.value, 0, 5000);
+    if (test_error) goto release_tb;
 
     char *charts_data_file = "charts_data/getting_values_statistics.csv";
 
@@ -290,6 +299,8 @@ result test_getting_values_speed_with_writing_result(database *db) {
         mkdir("charts_data", 0777);
 
     FILE *timestamp_file = fopen(charts_data_file, "wb");
+
+    if (timestamp_file != NULL) fprintf(timestamp_file, "value index, Time taken\n");
 
     maybe_data_iterator iterator = init_iterator(tb.value);
     if (iterator.error) {
@@ -343,17 +354,8 @@ result test_deleting_value(database *db) {
         goto release_tb;
     }
 
-    for (int it = 0; it < 1000; it++) {
-        any_typed_value data_values[1][4] = {
-            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
-                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
-                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
-                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
-        
-        };
-        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
-        if (test_error) goto release_tb;
-    }
+    test_error = fill_with_test_data(db, tb.value, 0, 1000);
+    if (test_error) goto release_tb;
 
     closure delete_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=500 }};
 
@@ -389,6 +391,158 @@ release_tb:
     release_table(tb.value);
     return test_error;
 }
+
+bool filter_int_less(any_value *value1, any_value *value2) {
+    return value1->int_value > value2->int_value;
+}
+
+result test_deleting_values_speed_with_writing_result(database *db) {
+    column_header headers[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+
+    result test_error = OK;
+
+    maybe_table tb = create_test_table(db, "table 7", headers, 4);
+    if (tb.error) { 
+        test_error = tb.error;
+        goto release_tb;
+    }
+
+    test_error = fill_with_test_data(db, tb.value, 0, 20100);
+    if (test_error) goto release_tb;
+
+    char *charts_data_file = "charts_data/deleting_values_statistics.csv";
+
+    struct stat st = {0};
+
+    if (stat("charts_datay", &st) == -1)
+        mkdir("charts_data", 0777);
+
+    FILE *timestamp_file = fopen(charts_data_file, "wb");
+    size_t overall_deleted = 0;
+
+    if (timestamp_file != NULL) fprintf(timestamp_file, "rows deleted, Time taken\n");
+
+    for (size_t it = 0; it < 201; it++) {
+
+        clock_t t = clock();
+
+        closure delete_int = (closure) { .func=filter_int_less, .value1=(any_value) { .int_value= overall_deleted + it }};
+
+        result_with_count delete_result = delete_where(tb.value, INT_32, "ints", delete_int);
+        if (delete_result.error || delete_result.count != it) {
+            test_error = delete_result.error == OK ? JOB_WAS_NOT_DONE : delete_result.error;
+            goto close_file;
+        }
+
+        t = clock() - t;
+        double time_taken = (double)t;
+        if (timestamp_file != NULL) fprintf(timestamp_file, "%d, %f\n", it, time_taken);
+
+        test_error = fill_with_test_data(db, tb.value, overall_deleted + 999000, overall_deleted + it + 999000);
+        if (test_error) goto close_file;
+
+        overall_deleted += it;
+    }
+
+close_file:
+    fclose(timestamp_file);
+
+    if (!test_error) make_image_from_csv(charts_data_file);
+
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}
+
+result test_updating_values_speed_with_writing_result(database *db) {
+    column_header headers[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+
+    result test_error = OK;
+
+    maybe_table tb = create_test_table(db, "table updating", headers, 4);
+    if (tb.error) { 
+        test_error = tb.error;
+        goto release_tb;
+    }
+
+    test_error = fill_with_test_data(db, tb.value, 0, 20100);
+    if (test_error) goto release_tb;
+
+    char *charts_data_file = "charts_data/updating_values_statistics.csv";
+
+    struct stat st = {0};
+
+    if (stat("charts_datay", &st) == -1)
+        mkdir("charts_data", 0777);
+
+    FILE *timestamp_file = fopen(charts_data_file, "wb");
+
+    if (timestamp_file != NULL) fprintf(timestamp_file, "rows updated, Time taken\n");
+
+    maybe_data update_dt = init_data(tb.value);
+    if (update_dt.error) {
+        test_error = update_dt.error;
+        goto release_dt;
+    }
+
+    size_t rows_updated = 0;
+
+    for (size_t it = 0; it < 201; it++) {
+        any_typed_value data_values[4] = {
+                (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it + 99999 } }, 
+                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
+                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
+                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } 
+        };
+
+        for (size_t columns = 0; columns < 4; columns++) {
+            test_error = data_init_any(update_dt.value, data_values[columns].value, data_values[columns].type);
+            if (test_error) goto release_dt;
+        }
+
+        clock_t t = clock();
+
+        closure update_int = (closure) { .func=filter_int_less, .value1=(any_value) { .int_value=rows_updated + it }};
+
+        result_with_count update_result = update_where(tb.value, INT_32, "ints", update_int, update_dt.value);
+        if (update_result.error || update_result.count != it) {
+            test_error = update_result.error == OK ? JOB_WAS_NOT_DONE : update_result.error;
+            goto release_dt;
+        }
+
+        t = clock() - t;
+        double time_taken = (double)t;
+        if (timestamp_file != NULL) fprintf(timestamp_file, "%d, %f\n", it, time_taken);
+
+        test_error = fill_with_test_data(db, tb.value, rows_updated + 999000, rows_updated + it + 999000);
+        if (test_error) goto release_dt;
+
+        rows_updated += it;
+
+        clear_data(update_dt.value);
+    }
+release_dt:
+    release_data(update_dt.value);
+close_file:
+    fclose(timestamp_file);
+
+    if (!test_error) make_image_from_csv(charts_data_file);
+
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}
+
 result test_updating_value(database *db) {
     column_header headers[4] = {
         (column_header) { .type=INT_32, .name="ints"},
@@ -405,17 +559,8 @@ result test_updating_value(database *db) {
         goto release_tb;
     }
 
-    for (int it = 0; it < 1000; it++) {
-        any_typed_value data_values[1][4] = {
-            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
-                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
-                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
-                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
-        
-        };
-        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
-        if (test_error) goto release_tb;
-    }
+    test_error = fill_with_test_data(db, tb.value, 0, 1000);
+    if (test_error) goto release_tb;
 
     closure update_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=500 }};
 
@@ -515,19 +660,11 @@ result test_tables_merging(database *db) {
         goto release_tb_2;
     }
 
-    for (int it = 0; it < 10; it++) {
-        any_typed_value data_values[1][4] = {
-            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
-                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
-                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
-                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
-        
-        };
-        test_error = fill_table_with_data(db, tb1.value, 4, 1, data_values);
-        if (test_error) goto release_tb_2;
-        test_error = fill_table_with_data(db, tb2.value, 4, 1, data_values);
-        if (test_error) goto release_tb_2;
-    }
+    test_error = fill_with_test_data(db, tb1.value, 0, 10);
+    if (test_error) goto release_tb_2;
+
+    test_error = fill_with_test_data(db, tb2.value, 0, 10);
+    if (test_error) goto release_tb_2;
 
     maybe_table joined_tb = join_table(tb1.value, tb2.value, "ints", INT_32, "merged table");
     if ( (test_error = joined_tb.error) ) goto release_tb_joined;
@@ -599,18 +736,9 @@ result test_table_filtering(database *db) {
         test_error = tb.error;
         goto release_tb;
     }
-    for (int it = 0; it < 10; it++) {
-        any_typed_value data_values[1][4] = {
-            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
-                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
-                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
-                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
-        
-        };
-        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
-        if (test_error) goto release_tb;
-    }
 
+    test_error = fill_with_test_data(db, tb.value, 0, 10);
+    if (test_error) goto release_tb;
 
     closure filter_preic = (closure) { .func=filter_table_greater, .value1=(any_value) { .int_value=5 }};
     maybe_table filtered_tb = filter_table(tb.value, INT_32, "ints", filter_preic);
@@ -658,20 +786,8 @@ result test_table_saving(database *db) {
         test_error = tb.error;
         goto release_tb;
     }
-
-    for (int it = 0; it < 500; it++) {
-        any_typed_value data_values[1][4] = {
-            {   (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it } }, 
-                (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
-                (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
-                (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } }
-        
-        };
-        test_error = fill_table_with_data(db, tb.value, 4, 1, data_values);
-        if (test_error) {
-            goto release_tb;
-        }
-    }
+    test_error = fill_with_test_data(db, tb.value, 0, 500);
+    if (test_error) goto release_tb;
 
     test_error = save_table(db, tb.value);
 
