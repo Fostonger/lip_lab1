@@ -59,7 +59,7 @@ struct database_closure {
 OPTIONAL(database)
 OPTIONAL(page)
 
-maybe_database initdb(FILE *file, bool overwrite);
+maybe_database initdb(char *filename, bool overwrite);
 void release_db(database *db);
 
 maybe_page create_page(database *db, table *tb, page_type type);

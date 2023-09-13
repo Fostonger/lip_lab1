@@ -441,7 +441,7 @@ result test_deleting_values_speed_with_writing_result(database *db) {
 
         t = clock() - t;
         double time_taken = (double)t;
-        if (timestamp_file != NULL) fprintf(timestamp_file, "%d, %f\n", it, time_taken);
+        if (timestamp_file != NULL) fprintf(timestamp_file, "%zu, %f\n", it, time_taken);
 
         test_error = fill_with_test_data(db, tb.value, overall_deleted + 999000, overall_deleted + it + 999000);
         if (test_error) goto close_file;
@@ -522,7 +522,7 @@ result test_updating_values_speed_with_writing_result(database *db) {
 
         t = clock() - t;
         double time_taken = (double)t;
-        if (timestamp_file != NULL) fprintf(timestamp_file, "%d, %f\n", it, time_taken);
+        if (timestamp_file != NULL) fprintf(timestamp_file, "%zu, %f\n", it, time_taken);
 
         test_error = fill_with_test_data(db, tb.value, rows_updated + 999000, rows_updated + it + 999000);
         if (test_error) goto release_dt;
@@ -963,6 +963,62 @@ result test_multipaged_strings_reading(database *db) {
 
 release_iter:
     release_iterator(iterator.value);
+release_tb:
+    release_table(tb.value);
+    return test_error;
+}
+
+size_t get_file_size(FILE *file) {
+    fseek(file, 0L, SEEK_END);
+    size_t sz = ftell(file);
+    return sz;
+}
+
+result test_file_size_usage_with_writing_result(database *db) {
+    column_header headers[4] = {
+        (column_header) { .type=INT_32, .name="ints"},
+        (column_header) { .type=BOOL, .name="bools"},
+        (column_header) { .type=FLOAT, .name="floats"},
+        (column_header) { .type=STRING, .name="strings"}
+    };
+
+    result test_error = OK;
+
+    maybe_table tb = create_test_table(db, "table 3", headers, 4);
+    if (tb.error) { 
+        test_error = tb.error;
+        goto release_tb;
+    }
+
+    char *charts_data_file = "charts_data/file_memory_statistics.csv";
+
+    struct stat st = {0};
+
+    if (stat("charts_datay", &st) == -1)
+        mkdir("charts_data", 0777);
+
+    FILE *timestamp_file = fopen(charts_data_file, "wb");
+
+    if (timestamp_file != NULL) fprintf(timestamp_file, "values written, memory used\n");
+
+    for (size_t it = 0; it < 10000; it++) {
+        test_error = fill_with_test_data(db, tb.value, 0, 1);
+        if (test_error) goto close_file;
+        test_error = save_table(db, tb.value);
+        if (test_error) goto close_file;
+
+        if (timestamp_file != NULL) fprintf(timestamp_file, "%zu, %zu\n", it, get_file_size(db->file));
+        // fclose(db->file);
+        // char *filename = "database.fost.data";
+        // FILE *dbfile = fopen(filename, "r+");
+        // db->file = dbfile;
+    }
+
+close_file:
+    fclose(timestamp_file);
+
+    if (!test_error) make_image_from_csv(charts_data_file);
+
 release_tb:
     release_table(tb.value);
     return test_error;

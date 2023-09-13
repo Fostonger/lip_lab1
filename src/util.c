@@ -15,7 +15,8 @@ static const char *const result_descriptions[] = {
     [INVALID_PAGE_NUMBER] = "ERROR: Before you move page, its number has to be first to write. Rearrange pages",
     [NOT_EQUAL] = "ERROR: Tests shown that values that should be equal are in fact not",
     [NOT_FOUND] = "ERROR: Tests shown that value that should be in table are missing",
-    [JOB_WAS_NOT_DONE] = "ERROR: Tests shown that the job that meant to be done is in fact isn't"
+    [JOB_WAS_NOT_DONE] = "ERROR: Tests shown that the job that meant to be done is in fact isn't",
+    [OPEN_ERROR] = "ERROR: Couldn't open database file"
 };
 
 int8_t print_if_failure( result result ) {

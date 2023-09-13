@@ -25,3 +25,5 @@ result test_table_reading(database *db);
 result test_multipaged_strings_adding(database *db);
 result test_multipaged_strings_saving(database *db);
 result test_multipaged_strings_reading(database *db);
+
+result test_file_size_usage_with_writing_result(database *db);

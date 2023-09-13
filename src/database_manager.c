@@ -42,7 +42,10 @@ maybe_database allocate_db(FILE *file) {
     return db;
 }
 
-maybe_database create_new_db(FILE *file) {
+maybe_database create_new_db(char *filename) {
+    FILE *file = fopen(filename, "w+");
+    if (file == NULL) return (maybe_database) { .error=OPEN_ERROR , .value=NULL };
+
     maybe_database db = allocate_db(file);
     if (db.error) return db;
 
@@ -54,7 +57,10 @@ maybe_database create_new_db(FILE *file) {
     return db;
 }
 
-maybe_database read_db(FILE *file) {
+maybe_database read_db(char *filename) {
+    FILE *file = fopen(filename, "r+");
+    if (file == NULL) return (maybe_database) { .error=OPEN_ERROR , .value=NULL };
+
     maybe_database db = allocate_db(file);
     if (db.error) return db;
     
@@ -68,9 +74,9 @@ maybe_database read_db(FILE *file) {
     return db;
 }
 
-maybe_database initdb(FILE *file, bool overwrite) {
-    if (overwrite) return create_new_db(file);
-    return read_db(file);
+maybe_database initdb(char *filename, bool overwrite) {
+    if (overwrite) return create_new_db(filename);
+    return read_db(filename);
 }
 
 void expand_loaded_pages_memory(database *db) {
@@ -403,5 +409,6 @@ void release_page(page *pg) {
 
 void release_db(database *db) {
     free(db->header);
+    fclose(db->file);
     free(db);
 }

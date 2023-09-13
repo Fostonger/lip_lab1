@@ -14,7 +14,8 @@ typedef enum {
     INVALID_PAGE_NUMBER,
     NOT_EQUAL,
     NOT_FOUND,
-    JOB_WAS_NOT_DONE
+    JOB_WAS_NOT_DONE,
+    OPEN_ERROR
 } result;
 
 typedef struct {
