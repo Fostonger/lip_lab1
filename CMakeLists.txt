@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.10)
+project(llp_lab1)
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+add_executable(llp_lab1 src/main.c src/tests.c src/util.c src/table.c src/database_manager.c src/data.c src/data_iterator.c)

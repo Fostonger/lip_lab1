@@ -13,6 +13,7 @@
                 "${workspaceFolder}/src/table.c",
                 "${workspaceFolder}/src/data.c",
                 "${workspaceFolder}/src/data_iterator.c",
+                "${workspaceFolder}/src/tests.c",
                 "${workspaceFolder}/src/main.c"
             ],
             "options": {
