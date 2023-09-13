@@ -30,7 +30,10 @@ void make_image_from_csv(const char *path_to_csv) {
     strcpy(final_str + strlen(init_str), path_to_csv);
     strcpy(final_str + strlen(init_str) + strlen(path_to_csv), str_end);
 
-    system(final_str);
+    int py_result = system(final_str);
+    if (py_result) {
+        printf("couldn't run script to write charts images. Do you have python and matplotlib installed?\n");
+    }
     free(final_str);
 }
 
