@@ -1,11 +1,10 @@
 # low-level programming lab 1
 ## Сборка
 
-Сборка происходит при помощи утилиты CMake. Стандарт языка должен быть минимум C11.
+Сборка происходит при помощи утилиты CMake. Для удобства добавлен скрипт build.sh. Стандарт языка должен быть минимум C11.
 
 ```bash
-cmake .
-make
+./build.sh
 ```
 
 Для создания графиков по замеренным данным тестов, вам нужно иметь python и библиотеку matplotlib
@@ -216,5 +215,274 @@ maybe_table filter_table(table*tb, column_type type, const char *column_name, cl
 void print_table(table *tb);
 ```
 ## Строки
-Особенное внимание хочу обратить на работу со строками: так как они могут быть любого размера, в таблицу заносится лишь ссылка на строку в форме { номер страницы со строкой; отступ от начала страницы }.
+Особенное внимание хочу обратить на работу со строками: так как они могут быть любого размера, в таблицу заносится лишь ссылка на строку ( ```string_data_ref``` ).
+```c
+typedef struct {
+    uint64_t string_page_number;
+    uint64_t offset;
+} string_data_ref;
+
+typedef struct {
+    string_data_ref     link_to_current; // ссылка на ссылку, которая указывает на текущую строку
+    uint64_t            str_len;
+    string_data_ref     next_part; // ссылка на следующую часть строки
+    bool                enabled;
+    char                string[];
+} string_in_storage;
+```
+Строки образуют двусвязный список. Это нужно для того, чтобы при перемещении страницы можно было бы изменить ссылку на перемещающуюся строку.
 При удалении или изменении строки (при изменении происходит удаление изменяемой строки и запись новой на страницу подходящего размера) старая строка помечается удаленной. При сохранении страницы с удаленными строками все последующие на странице строки сдвигаются на длину строки, их ссылки обновляются.
+
+## Аспекты реализации
+Для начала работы необходимо создать базу данных. Внутри режим открытия файла определяется автоматически: если базу данных нужно переписать (второй аргумент функции initdb), то при открыти будет выбран режим, удаляющий сожержимое файла. Во время создания базы данных может возникнуть ошибка, поэтому после вызова ```initdb``` нужно проверить, что флаг ошибки не выставлен:
+
+```c
+maybe_database db = initdb(filename, true);
+if (db.error) {
+    print_if_failure(db.error);
+    return 1;
+}
+```
+
+После создания базы данных можно создавать таблицу. Она так же возвращает optional, так что после вызова нужно проверить ее на наличие флага error:
+```c
+maybe_table tb = create_table("test table", db);
+```
+
+Пока в таблицу не записаны данные, можно добавлять информацию о столбцах таблицы (после добавления данных функция add_column будет возвращать ошибку):
+```c
+result add_error = add_column(tb.value, "example ints column", INT_32);
+if (add_error) return add_error;
+add_error = add_column(tb.value, "example strings column", STRING);
+```
+Заполнение таблицы данными происходит при помощи структуры ```data```
+После инициализации структуры данными требуется вызвать функцию ```set_data``` для вставки данных
+```c
+result fill_table_with_data(database *db, table *tb, size_t columns_count, size_t rows_count, any_typed_value values[rows_count][columns_count]) {
+    result filling_error = OK;
+    maybe_data dt = init_data(tb);
+    if (dt.error) {
+        filling_error = dt.error;
+        goto release_dt;
+    }
+    for (size_t rows = 0; rows < rows_count; rows++) {
+        for (size_t columns = 0; columns < columns_count; columns ++) {
+            filling_error = data_init_any(dt.value, values[rows][columns].value, values[rows][columns].type);
+            if (filling_error) goto release_dt;
+        }
+        filling_error = set_data(dt.value);
+        if (filling_error) goto release_dt;
+        clear_data(dt.value);
+    }
+
+release_dt:
+    release_data(dt.value);
+    return filling_error;
+}
+```
+Функция ```ensure_enough_space_table``` удостоверяется, что страница ```table->first_page_to_write``` подходящего размера для данного размера данных. Если нужно, она же создает новую страницу.
+```c
+result set_data(data *dt) {
+    result is_enough_space = ensure_enough_space_table(dt->table, dt->size, TABLE_DATA);
+    if (is_enough_space) return is_enough_space;
+
+    char *data_ptr = dt->bytes;
+
+    page *pg_to_write = dt->table->first_page_to_write;
+    uint64_t offset_to_row = pg_to_write->pgheader->data_offset;
+
+    set_page_info_in_strings(dt, pg_to_write->pgheader->page_number, offset_to_row);
+
+    void **table_ptr = pg_to_write->data + offset_to_row;
+    memcpy(table_ptr, data_ptr, dt->size);
+
+    dt->table->first_page_to_write->pgheader->data_offset += dt->size;
+
+    return OK;
+}
+```
+При добавлении целочисленных, булевых и чисел с плавающей точкой типов, данные записываются в память ```data```, в то время как для строк уже в этот момент выделяются страницы. Если нужно, строка делится на несколько страниц, и в заголовок строки ставится указатель на следующую часть строки. Указатель на первую строку для записи хранится в структуре ```table```.
+Данные в ```data``` хранятся последовательно друг за другом
+```c
+result data_init_integer(data *dt, int32_t val) {
+    if (dt->size + type_to_size(INT_32) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
+    char *ptr = (char *)dt->bytes + dt->size;
+    *( (int32_t*) ptr ) = val;
+    dt->size += type_to_size(INT_32);
+    return OK;
+}
+
+result data_init_string(data *dt, const char* val) {
+    if (dt->size + type_to_size(STRING) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
+    char *ptr = dt->bytes + dt->size;
+    dt->size += type_to_size(STRING);
+
+    size_t string_len = strlen(val) + 1;
+    string_data_ref *cur_string_ref = (string_data_ref *)ptr;
+    string_data_ref *prev_string_ref = NULL;
+    string_data_ref written_string_ref = (string_data_ref){};
+    size_t string_offset = 0;
+
+    while (string_len > 0) {
+        size_t cur_string_len = MIN(string_len, PAGE_SIZE - sizeof(string_in_storage));
+
+        string_data_ref previously_written_ref = written_string_ref;
+        string_data_ref *future_string_ref = data_init_one_page_string(dt, val + string_offset, cur_string_ref, &prev_string_ref, cur_string_len);
+        written_string_ref = *cur_string_ref;
+        cur_string_ref = future_string_ref;
+        if (prev_string_ref != NULL && previously_written_ref.string_page_number != 0) {
+            previously_written_ref.offset += sizeof(string_data_ref) + sizeof(uint64_t);
+            *prev_string_ref = previously_written_ref;
+        }
+
+        string_offset += cur_string_len;
+        string_len -= cur_string_len;
+    }
+    
+    return OK;
+}
+
+result data_init_boolean(data *dt, bool val) {
+    if (dt->size + type_to_size(BOOL) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
+    char *ptr = (char *)dt->bytes + dt->size;
+    *( (bool*) ptr ) = val;
+    dt->size += type_to_size(BOOL);
+    return OK;
+}
+
+result data_init_float(data *dt, float val) {
+    if (dt->size + type_to_size(FLOAT) > dt->table->header->row_size) return NOT_ENOUGH_SPACE;
+    char *ptr = (char *)dt->bytes + dt->size;
+    *( (float*) ptr ) = val;
+    dt->size += type_to_size(FLOAT);
+    return OK;
+}
+
+result data_init_any(data *dt, const any_value val, column_type type) {
+    switch (type) {
+    case INT_32:
+        return data_init_integer(dt, val.int_value);
+    case FLOAT:
+        return data_init_float(dt, val.float_value);
+    case BOOL:
+        return data_init_boolean(dt, val.bool_value);
+    case STRING:
+        return data_init_string(dt, val.string_value);
+    default:
+        break;
+    }
+}
+
+```
+Доступ к уже существующим в файле данным происходит при помощи ```data_iterator``` и интерфейсов для работы с ним
+```c
+bool seek_next_where(data_iterator *iter, column_type type, const char *column_name, closure clr) {
+    if (!has_next(iter)) return false;
+
+    size_t offset = offset_to_column(iter->tb->header, column_name, type);
+    
+    while (has_next(iter)) {
+        while (iter->cur_data->bytes - (char *)iter->cur_page->data >= iter->cur_page->pgheader->data_offset) {
+            if (iter->cur_page->pgheader->next_page_number == 0) return false;
+            
+            maybe_page next_page = get_page_by_number(iter->tb->db, iter->tb, iter->cur_page->pgheader->next_page_number);
+            iter->cur_page->next_page = next_page.value;
+            iter->cur_page = next_page.value;
+            iter->cur_data->bytes = iter->cur_page->data;
+        }
+
+        any_value value;
+        get_any(iter, &value, offset, type);
+
+        if ( clr.func(&clr.value1, &value) ) {
+            if (type == STRING) free(value.string_value);
+            return true;
+        }
+
+        get_next(iter);
+    }
+    return false;
+}
+```
+
+```c
+result_with_count update_where(table* tb, column_type type, const char *column_name, closure clr, data *update_val) {
+    maybe_data_iterator iterator = init_iterator(tb);
+    if (iterator.error) return (result_with_count) { .error=iterator.error, .count=0 };
+    int16_t update_count = 0;
+    while (seek_next_where(iterator.value, type, column_name, clr)) {
+        data *data_to_update = iterator.value->cur_data;
+        update_string_data_for_row(data_to_update, iterator.value->cur_page, update_val);
+        update_count++;
+    }
+
+    release_iterator(iterator.value);
+    return (result_with_count) { .error=OK, .count=update_count };
+}
+```
+
+```c
+result_with_count delete_where(table *tb, column_type type, const char *column_name, closure clr) {
+    maybe_data_iterator iterator = init_iterator(tb);
+    if (iterator.error) return (result_with_count) { .error=iterator.error, .count=0 };
+    int16_t delete_count = 0;
+    while (seek_next_where(iterator.value, type, column_name, clr)) {
+        data *data_to_delete = iterator.value->cur_data;
+        result delete_error = delete_saved_row(data_to_delete, iterator.value->cur_page);
+        if (delete_error) {
+            release_iterator(iterator.value);
+            return (result_with_count) { .error=delete_error, .count=0 };
+        }
+        delete_count++;
+    }
+
+    release_iterator(iterator.value);
+    return (result_with_count) { .error=OK, .count=delete_count };
+}
+```
+В данных функциях для нахождения значения используется ```closure``` - моя реализация замыканий
+```c
+typedef struct {
+    union{
+        int32_t int_value;
+        float float_value;
+        bool bool_value;
+        char *string_value;
+    };
+} any_value;
+
+typedef struct {
+    bool (*func)(any_value *value1, any_value *value2);
+    any_value value1;
+} closure;
+```
+
+Функция ```seek_next_where```, лежащая в основе всех остальных интерфейсов ```data_iterator``` работает следующим образом:
+
+- На вход функции подается итератор для конкретной таблицы
+- Функция считывает данные по указателю данных и передает считанное значение в функцию-предикат. Если она возвращает ```true```, то функция возвращает ```true```
+- После этого можно прочитать конкретное значение указываемой итератором строки при помощи функций ```get*Type*()```, передав туда имя желаемого столбца
+- Если страница с данными закончилась, то функция освобождает её, загружая следующую и пытается читать данные оттуда
+- Если данных не осталось, функция возвращает ```false```
+
+
+## Результаты
+Результат записи 1000 строк в таблицу. По оси абсцисс - номер записанной строки, по оси ординат - время записи в микросекундах.
+
+![Write Timings](chart_images/writing_values_statistics.png)
+
+Результат чтения 1000 строк из таблицы. По оси абсцисс - номер считанной строки, по оси ординат - время, потраченное на поиск строки в микросекундах.
+
+![Read Timings](chart_images/getting_values_statistics.png)
+
+Результат удаления строк таблицы. По оси абсцисс - количество удаленных строк, по оси ординат - время, потраченное на удаление строк в микросекундах. После каждого удаления таблица дополнялась до изначального количества элементов.
+
+![Delete Timings](chart_images/deleting_values_statistics.png)
+
+Результат обновления строк таблицы. По оси абсцисс - количество измененных строк, по оси ординат - время, потраченное на поиск и изменение строк в микросекундах.
+
+![Update Timings](chart_images/updating_values_statistics.png)
+
+Замеры размеров файла базы данных после добавления строки и сохранения таблицы. По оси абсцисс - количество добавленных строк, по оси ординат - размер файла базы данных в байтах.
+
+![Memory usage](chart_images/file_memory_statistics.png)
