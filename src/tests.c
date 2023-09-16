@@ -478,7 +478,7 @@ result test_updating_values_speed_with_writing_result(database *db) {
         goto release_tb;
     }
 
-    test_error = fill_with_test_data(db, tb.value, 0, 20100);
+    test_error = fill_with_test_data(db, tb.value, 0, 100);
     if (test_error) goto release_tb;
 
     char *charts_data_file = "charts_data/updating_values_statistics.csv";
@@ -498,11 +498,12 @@ result test_updating_values_speed_with_writing_result(database *db) {
         goto release_dt;
     }
 
-    size_t rows_updated = 0;
+    bool updated_val[10000];
+    size_t ceil = 100;
 
-    for (size_t it = 0; it < 201; it++) {
+    for (size_t it = 0; it < 198; it++) {
         any_typed_value data_values[4] = {
-                (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=it + 99999 } }, 
+                (any_typed_value) { .type=INT_32, .value=(any_value) { .int_value=ceil } }, 
                 (any_typed_value) { .type=BOOL, .value=(any_value) { .bool_value=false } },
                 (any_typed_value) { .type=FLOAT, .value=(any_value) { .float_value=3.1415 } },
                 (any_typed_value) { .type=STRING, .value=(any_value) {.string_value="string test"} } 
@@ -513,24 +514,28 @@ result test_updating_values_speed_with_writing_result(database *db) {
             if (test_error) goto release_dt;
         }
 
+        int32_t rand_val = 0;
+
+        while ( updated_val[( rand_val = rand() % ceil )] );
+        updated_val[rand_val] = true;
+
         clock_t t = clock();
 
-        closure update_int = (closure) { .func=filter_int_less, .value1=(any_value) { .int_value=rows_updated + it }};
+        closure update_int = (closure) { .func=simple_ints_search_predicate, .value1=(any_value) { .int_value=rand_val }};
 
         result_with_count update_result = update_where(tb.value, INT_32, "ints", update_int, update_dt.value);
-        if (update_result.error || update_result.count != it) {
+        if (update_result.error || update_result.count != 1) {
             test_error = update_result.error == OK ? JOB_WAS_NOT_DONE : update_result.error;
             goto release_dt;
         }
 
         t = clock() - t;
         double time_taken = (double)t;
-        if (timestamp_file != NULL) fprintf(timestamp_file, "%zu, %f\n", it, time_taken);
+        if (timestamp_file != NULL) fprintf(timestamp_file, "%zu, %f\n", ceil, time_taken);
 
-        test_error = fill_with_test_data(db, tb.value, rows_updated + 999000, rows_updated + it + 999000);
+        ceil += 50;
+        test_error = fill_with_test_data(db, tb.value, ceil - 49, ceil);
         if (test_error) goto release_dt;
-
-        rows_updated += it;
 
         clear_data(update_dt.value);
     }
